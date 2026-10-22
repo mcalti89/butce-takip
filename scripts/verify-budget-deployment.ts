@@ -1,4 +1,5 @@
 import "dotenv/config";
+import { verifyGoogleDeployment } from "./verify-google-deployment";
 import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { isDeepStrictEqual } from "node:util";
@@ -10,6 +11,10 @@ import { demoData } from "../lib/budget/model";
 
 // Use a unique synthetic account. Never read or update a real owner's document.
 async function main() {
+  if (process.env.BUDGET_GOOGLE_CLIENT_ID) {
+    await verifyGoogleDeployment();
+    return;
+  }
   const options = databaseOptions();
   if (!options) throw new Error("SQL configuration missing");
   if (
@@ -30,6 +35,7 @@ async function main() {
   const origin = "https://butcetakip-vercel-drop.vercel.app";
   const app = createBudgetApp({
     repository,
+    googleClientId: "",
     ownerEmail: email,
     ownerPassword: password,
     origin,

@@ -2,14 +2,22 @@ import type { BudgetData } from "./model";
 import { validateData } from "./model";
 export type CloudStatus = {
   enabled: boolean;
+  googleEnabled: boolean;
   authenticated: boolean;
+  accountId?: string;
   email?: string;
+  legacyImportAllowed?: boolean;
 };
-export type CloudSnapshot = { revision: number; data: BudgetData | null };
+export type CloudSnapshot = {
+  accountId: string;
+  revision: number;
+  data: BudgetData | null;
+};
 export class CloudError extends Error {
   constructor(
     message: string,
     readonly status: number,
+    readonly code?: string,
   ) {
     super(message);
   }
@@ -26,11 +34,13 @@ function endpoint(action: string) {
   return `/api/cloud?action=${action}`;
 }
 async function request<T>(action: string, body?: unknown): Promise<T> {
-  let response: Response;
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), 10000);
+  const timeout = setTimeout(
+    () => controller.abort(),
+    action === "google-login" ? 20000 : 10000,
+  );
   try {
-    response = await fetch(endpoint(action), {
+    const response = await fetch(endpoint(action), {
       signal: controller.signal,
       method: body === undefined ? "GET" : "POST",
       credentials: "include",
@@ -41,28 +51,38 @@ async function request<T>(action: string, body?: unknown): Promise<T> {
       },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
-  } catch {
+    const result = await response.json().catch(() => null);
+    if (!response.ok || !result)
+      throw new CloudError(
+        result?.error || "Hesap hizmeti şu anda kullanılamıyor.",
+        response.status,
+        typeof result?.code === "string" ? result.code : undefined,
+      );
+    return result as T;
+  } catch (error) {
+    if (error instanceof CloudError) throw error;
     throw new CloudError(
-      "SQL sunucusuna ulaşılamadı. Bağlantını kontrol et; yerel kopyan korunuyor.",
+      "Hesap sunucusuna ulaşılamadı. İnternet bağlantını kontrol edip tekrar dene.",
       0,
     );
   } finally {
     clearTimeout(timeout);
   }
-  const result = await response.json().catch(() => null);
-  if (!response.ok || !result)
-    throw new CloudError(
-      result?.error || "SQL hizmeti şu anda kullanılamıyor.",
-      response.status,
-    );
-  return result as T;
 }
 export const cloudStatus = () => request<CloudStatus>("status");
-export const cloudLogin = (email: string, password: string) =>
-  request<CloudStatus>("login", { email, password });
+export const googleConfig = () =>
+  request<{ clientId: string; nonce: string }>("google-config");
+export const cloudGoogleLogin = (credential: string) =>
+  request<CloudStatus>("google-login", { credential });
 export const cloudLogout = () => request<{ ok: boolean }>("logout", {});
-export async function cloudRead(): Promise<CloudSnapshot> {
+export async function cloudRead(accountId: string): Promise<CloudSnapshot> {
   const snapshot = await request<CloudSnapshot>("data");
+  if (snapshot.accountId !== accountId)
+    throw new CloudError(
+      "Açık hesap değişti. Lütfen oturumunu yeniden kontrol et.",
+      409,
+      "ACCOUNT_CHANGED",
+    );
   if (
     !Number.isSafeInteger(snapshot.revision) ||
     snapshot.revision < 0 ||
@@ -74,8 +94,22 @@ export async function cloudRead(): Promise<CloudSnapshot> {
     );
   return snapshot;
 }
-export async function cloudWrite(revision: number, data: BudgetData) {
-  const next = await request<{ revision: number }>("data", { revision, data });
+export async function cloudWrite(
+  accountId: string,
+  revision: number,
+  data: BudgetData,
+) {
+  const next = await request<{ accountId: string; revision: number }>("data", {
+    accountId,
+    revision,
+    data,
+  });
+  if (next.accountId !== accountId)
+    throw new CloudError(
+      "Açık hesap değişti. Lütfen oturumunu yeniden kontrol et.",
+      409,
+      "ACCOUNT_CHANGED",
+    );
   if (next.revision !== revision + 1)
     throw new CloudError(
       "Kayıt sürümü doğrulanamadı. Son verileri yeniden yükle.",

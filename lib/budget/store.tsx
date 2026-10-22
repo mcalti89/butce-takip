@@ -8,16 +8,14 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { BudgetData, demoData, emptyData, validateData } from "./model";
+import { BudgetData, emptyData, validateData } from "./model";
+import { isPristineBudget } from "./account";
 import * as api from "./cloudApi";
 
-const KEY = "butce-takip-v1";
-const CLOUD_KEY = "butce-takip-cloud-v1";
-export type CloudInfo = {
+const LEGACY_KEY = "butce-takip-v1";
+const AUTH_EVENT = "butce-takip-auth-event";
+export type CloudInfo = api.CloudStatus & {
   mode: "local" | "cloud" | "locked";
-  enabled: boolean;
-  authenticated: boolean;
-  email?: string;
   remoteCount: number | null;
   error: string;
 };
@@ -25,112 +23,193 @@ type Context = {
   data: BudgetData;
   loading: boolean;
   storageError: string;
+  cloud: CloudInfo;
+  legacyCount: number;
+  canImportLegacy: boolean;
   update: (fn: (data: BudgetData) => BudgetData) => Promise<void>;
   startFresh: () => Promise<void>;
-  cloud: CloudInfo;
-  signIn: (email: string, password: string) => Promise<void>;
-  startCloud: (uploadLocal: boolean) => Promise<void>;
+  signInGoogle: (credential: string) => Promise<void>;
+  refreshSession: () => Promise<void>;
+  importLegacy: () => Promise<void>;
   reloadCloud: () => Promise<void>;
   leaveCloud: () => Promise<void>;
 };
 const BudgetContext = createContext<Context | null>(null);
-async function readStorage(key = KEY) {
-  return Platform.OS === "web"
-    ? window.localStorage.getItem(key)
-    : AsyncStorage.getItem(key);
-}
-async function writeStorage(value: string, key = KEY) {
-  if (Platform.OS === "web") window.localStorage.setItem(key, value);
-  else await AsyncStorage.setItem(key, value);
-}
-async function clearCloudPreference() {
-  if (Platform.OS === "web") window.localStorage.removeItem(CLOUD_KEY);
-}
-const INITIAL_CLOUD: CloudInfo = {
-  mode: "local",
+const INITIAL: CloudInfo = {
+  mode: "locked",
   enabled: false,
+  googleEnabled: false,
   authenticated: false,
   remoteCount: null,
   error: "",
 };
-
+function announceAuthChange() {
+  try {
+    if (Platform.OS === "web")
+      localStorage.setItem(AUTH_EVENT, `${Date.now()}-${Math.random()}`);
+  } catch {
+    /* Login does not depend on browser storage. */
+  }
+}
 export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const [data, setData] = useState<BudgetData>(emptyData());
   const [loading, setLoading] = useState(true);
   const [storageError, setStorageError] = useState("");
-  const [cloud, setCloud] = useState<CloudInfo>(INITIAL_CLOUD);
-  const ref = useRef(data);
-  const local = useRef(data);
-  const snapshot = useRef<api.CloudSnapshot>({ revision: 0, data: null });
-  const mode = useRef<CloudInfo["mode"]>("local");
+  const [cloud, setCloud] = useState<CloudInfo>(INITIAL);
+  const [legacyCount, setLegacyCount] = useState(0);
+  const [canImportLegacy, setCanImportLegacy] = useState(false);
+  const current = useRef(data);
+  const accountId = useRef("");
+  const legacy = useRef<BudgetData | null>(null);
+  const snapshot = useRef<api.CloudSnapshot | null>(null);
+  const epoch = useRef(0);
   const queue = useRef<Promise<void>>(Promise.resolve());
   const setCurrent = useCallback((next: BudgetData) => {
-    ref.current = next;
+    current.current = next;
     setData(next);
+    setCanImportLegacy(Boolean(legacy.current) && isPristineBudget(next));
   }, []);
-  useEffect(() => {
-    let active = true;
-    async function load() {
-      let localError = false;
-      let preferred = false;
-      try {
-        const raw = await readStorage();
-        const parsed = raw ? JSON.parse(raw) : demoData();
-        if (!validateData(parsed)) throw new Error("invalid");
-        local.current = parsed;
-        preferred =
-          Platform.OS === "web" && (await readStorage(CLOUD_KEY)) === "1";
-        if (!active) return;
-        setCurrent(parsed);
-      } catch {
-        localError = true;
-        if (active)
-          setStorageError(
-            "Yerel veriler okunamadı. Mevcut kayıtlar korunuyor; tarayıcı depolama izinlerini kontrol et.",
-          );
-      }
-      if (preferred) {
-        mode.current = "locked";
-        if (active) setCurrent(emptyData());
-      }
-      if (Platform.OS === "web" && !localError) {
-        try {
-          const status = await api.cloudStatus();
-          const remote = status.authenticated
-            ? await api.cloudRead()
-            : { revision: 0, data: null };
-          if (!active) return;
-          snapshot.current = remote;
-          if (preferred && status.authenticated && remote.data) {
-            mode.current = "cloud";
-            setCurrent(remote.data);
-          }
+  const clearMemory = useCallback(() => {
+    accountId.current = "";
+    snapshot.current = null;
+    legacy.current = null;
+    setLegacyCount(0);
+    setStorageError("");
+    setCurrent(emptyData());
+  }, [setCurrent]);
+  const lock = useCallback(
+    (error: string) => {
+      epoch.current++;
+      clearMemory();
+      setCloud((info) => ({
+        ...info,
+        mode: "locked",
+        authenticated: false,
+        accountId: undefined,
+        email: undefined,
+        legacyImportAllowed: false,
+        error,
+      }));
+    },
+    [clearMemory],
+  );
+  const loadAccount = useCallback(
+    async (status: api.CloudStatus, generation: number) => {
+      if (!status.googleEnabled || !status.authenticated || !status.accountId) {
+        if (epoch.current === generation)
           setCloud({
+            ...INITIAL,
             ...status,
-            mode: mode.current,
-            remoteCount: remote.data?.transactions.length ?? null,
-            error:
-              preferred && mode.current !== "cloud"
-                ? "SQL oturumunu aç veya yerel moda dön. Yerel kopyan korunuyor."
-                : "",
+            authenticated: false,
+            mode: "locked",
           });
+        return;
+      }
+      let remote = await api.cloudRead(status.accountId);
+      if (!remote.data) {
+        try {
+          await api.cloudWrite(status.accountId, 0, emptyData());
         } catch (error) {
-          if (active)
-            setCloud({
-              ...INITIAL_CLOUD,
-              enabled: preferred,
-              mode: mode.current,
-              error: preferred ? (error as Error).message : "",
-            });
+          if (
+            !(
+              error instanceof api.CloudError &&
+              error.status === 409 &&
+              error.code !== "ACCOUNT_CHANGED"
+            )
+          )
+            throw error;
+        }
+        remote = await api.cloudRead(status.accountId);
+      }
+      if (!remote.data)
+        throw new Error("Hesabın bütçesi açılamadı. Yeniden dene.");
+      let old: BudgetData | null = null;
+      let oldError = "";
+      if (status.legacyImportAllowed) {
+        try {
+          const raw =
+            Platform.OS === "web"
+              ? localStorage.getItem(LEGACY_KEY)
+              : await AsyncStorage.getItem(LEGACY_KEY);
+          if (raw) {
+            const parsed = JSON.parse(raw);
+            if (!validateData(parsed)) throw new Error();
+            if (!parsed.demo) old = parsed;
+          }
+        } catch {
+          oldError =
+            "Bu cihazdaki eski bütçe okunamadı. Özgün kayıtlar değiştirilmedi.";
         }
       }
-      if (active) setLoading(false);
+      if (epoch.current !== generation) return;
+      accountId.current = status.accountId;
+      snapshot.current = remote;
+      legacy.current = old;
+      setLegacyCount(old?.transactions.length ?? 0);
+      setStorageError(oldError);
+      setCurrent(remote.data);
+      setCloud({
+        ...status,
+        mode: "cloud",
+        remoteCount: remote.data.transactions.length,
+        error: "",
+      });
+    },
+    [setCurrent],
+  );
+  const refreshSession = useCallback(async () => {
+    const generation = ++epoch.current;
+    clearMemory();
+    setLoading(true);
+    try {
+      await loadAccount(await api.cloudStatus(), generation);
+    } catch (error) {
+      if (epoch.current === generation)
+        setCloud((info) => ({
+          ...info,
+          authenticated: false,
+          mode: "locked",
+          error: (error as Error).message,
+        }));
+    } finally {
+      if (epoch.current === generation) setLoading(false);
     }
-    void load();
-    return () => {
-      active = false;
+  }, [clearMemory, loadAccount]);
+  useEffect(() => {
+    void refreshSession();
+    if (Platform.OS !== "web") return;
+    const changed = (event: StorageEvent) => {
+      if (event.key === AUTH_EVENT) void refreshSession();
     };
-  }, [setCurrent]);
+    const focus = () => {
+      if (!accountId.current) return;
+      const expected = accountId.current;
+      void api
+        .cloudStatus()
+        .then((status) => {
+          if (
+            accountId.current === expected &&
+            (!status.authenticated || status.accountId !== expected)
+          )
+            void refreshSession();
+        })
+        .catch((error) => {
+          if (accountId.current === expected) lock((error as Error).message);
+        });
+    };
+    const visible = () => {
+      if (document.visibilityState === "visible") focus();
+    };
+    window.addEventListener("storage", changed);
+    window.addEventListener("focus", focus);
+    document.addEventListener("visibilitychange", visible);
+    return () => {
+      epoch.current++;
+      window.removeEventListener("storage", changed);
+      window.removeEventListener("focus", focus);
+      document.removeEventListener("visibilitychange", visible);
+    };
+  }, [refreshSession, lock]);
   const serial = useCallback(
     (work: () => Promise<void>) => {
       const next = queue.current
@@ -139,140 +218,123 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         .catch((error) => {
           if (
             error instanceof api.CloudError &&
-            error.status === 401 &&
-            mode.current === "cloud"
-          ) {
-            mode.current = "locked";
-            setCurrent(emptyData());
-            setCloud((info) => ({
-              ...info,
-              mode: "locked",
-              authenticated: false,
-              error: error.message,
-            }));
-          }
+            (error.status === 401 || error.code === "ACCOUNT_CHANGED")
+          )
+            lock(error.message);
           throw error;
         });
       queue.current = next;
       return next;
     },
-    [setCurrent],
+    [lock],
   );
   const update = useCallback(
-    (fn: (value: BudgetData) => BudgetData) =>
-      serial(async () => {
-        if (mode.current === "locked")
-          throw new Error(
-            "SQL bağlantısı kilitli. Önce oturumunu aç veya yerel moda dön.",
-          );
-        if (storageError && mode.current === "local")
-          throw new Error(
-            "Depolama erişimi yok. Mevcut verilerin üzerine yazılmadı.",
-          );
-        const next = fn(ref.current);
+    (fn: (value: BudgetData) => BudgetData) => {
+      const expected = accountId.current;
+      const generation = epoch.current;
+      return serial(async () => {
+        if (
+          !expected ||
+          expected !== accountId.current ||
+          generation !== epoch.current ||
+          !snapshot.current
+        )
+          throw new Error("Önce Google hesabınla giriş yap.");
+        const next = fn(current.current);
         if (!validateData(next))
           throw new Error("Veriler doğrulanamadı. Kayıt yapılamadı.");
-        if (mode.current === "cloud") {
-          const revision = await api.cloudWrite(
-            snapshot.current.revision,
-            next,
-          );
-          snapshot.current = { revision, data: next };
-        } else {
-          try {
-            await writeStorage(JSON.stringify(next));
-          } catch {
-            throw new Error(
-              "Kaydedilemedi. Tarayıcı depolaması dolu veya kapalı olabilir.",
-            );
-          }
-          local.current = next;
-        }
+        const revision = await api.cloudWrite(
+          expected,
+          snapshot.current.revision,
+          next,
+        );
+        if (expected !== accountId.current || generation !== epoch.current)
+          throw new Error("Hesap değişti. Eski ekranın verileri açılmadı.");
+        snapshot.current = { accountId: expected, revision, data: next };
         setCurrent(next);
-      }),
-    [serial, setCurrent, storageError],
-  );
-  const signIn = useCallback(
-    (email: string, password: string) =>
-      serial(async () => {
-        if (Platform.OS !== "web")
-          throw new Error(
-            "SQL oturumu şu an web/PWA sürümünde kullanılabilir.",
-          );
-        const status = await api.cloudLogin(email, password);
-        const remote = await api.cloudRead();
-        snapshot.current = remote;
-        if (mode.current === "locked" && remote.data) {
-          mode.current = "cloud";
-          setCurrent(remote.data);
-        }
-        setCloud({
-          ...status,
-          mode: mode.current,
-          remoteCount: remote.data?.transactions.length ?? null,
-          error: "",
-        });
-      }),
+      });
+    },
     [serial, setCurrent],
   );
-  const startCloud = useCallback(
-    (uploadLocal: boolean) =>
-      serial(async () => {
-        const remote = await api.cloudRead();
-        if (uploadLocal && remote.data !== null)
-          throw new Error(
-            "SQL hesabında kayıt var. Üzerine yazılmadı; sunucudaki bütçeyi açabilirsin.",
-          );
-        const next = remote.data ?? (uploadLocal ? local.current : emptyData());
-        await writeStorage("1", CLOUD_KEY);
-        try {
-          const revision = remote.data
-            ? remote.revision
-            : await api.cloudWrite(0, next);
-          snapshot.current = { revision, data: next };
-          mode.current = "cloud";
-          setCurrent(next);
+  const signInGoogle = useCallback(
+    async (credential: string) => {
+      const generation = ++epoch.current;
+      clearMemory();
+      setLoading(true);
+      try {
+        await loadAccount(await api.cloudGoogleLogin(credential), generation);
+        announceAuthChange();
+      } catch (error) {
+        if (epoch.current === generation)
           setCloud((info) => ({
             ...info,
-            mode: "cloud",
-            remoteCount: next.transactions.length,
-            error: "",
+            authenticated: false,
+            mode: "locked",
+            error: (error as Error).message,
           }));
-        } catch (error) {
-          await clearCloudPreference().catch(() => {});
-          throw error;
-        }
-      }),
-    [serial, setCurrent],
+        throw error;
+      } finally {
+        if (epoch.current === generation) setLoading(false);
+      }
+    },
+    [clearMemory, loadAccount],
   );
-  const reloadCloud = useCallback(
-    () =>
-      serial(async () => {
-        const remote = await api.cloudRead();
-        if (!remote.data) throw new Error("SQL hesabında henüz bir bütçe yok.");
-        snapshot.current = remote;
-        mode.current = "cloud";
-        setCurrent(remote.data);
-        setCloud((info) => ({
-          ...info,
-          mode: "cloud",
-          remoteCount: remote.data!.transactions.length,
-          error: "",
-        }));
-      }),
-    [serial, setCurrent],
-  );
+  const reloadCloud = useCallback(() => {
+    const expected = accountId.current;
+    const generation = epoch.current;
+    return serial(async () => {
+      if (!expected) throw new Error("Önce giriş yap.");
+      const remote = await api.cloudRead(expected);
+      if (!remote.data) throw new Error("Bütçe bulunamadı; yeniden giriş yap.");
+      if (expected !== accountId.current || generation !== epoch.current)
+        return;
+      snapshot.current = remote;
+      setCurrent(remote.data);
+      setCloud((info) => ({
+        ...info,
+        remoteCount: remote.data!.transactions.length,
+        error: "",
+      }));
+    });
+  }, [serial, setCurrent]);
+  const importLegacy = useCallback(() => {
+    const expected = accountId.current;
+    const generation = epoch.current;
+    return serial(async () => {
+      if (!expected || !legacy.current || !cloud.legacyImportAllowed)
+        throw new Error("Bu hesap için aktarılabilecek eski bütçe bulunamadı.");
+      const remote = await api.cloudRead(expected);
+      if (!remote.data || !isPristineBudget(remote.data))
+        throw new Error(
+          "Hesabında zaten değişiklikler var. Eski bütçe bunların üzerine yazılmadı.",
+        );
+      const next = legacy.current;
+      const revision = await api.cloudWrite(expected, remote.revision, next);
+      if (expected !== accountId.current || generation !== epoch.current)
+        return;
+      snapshot.current = { accountId: expected, revision, data: next };
+      setCurrent(next);
+    });
+  }, [serial, setCurrent, cloud.legacyImportAllowed]);
   const leaveCloud = useCallback(
     () =>
       serial(async () => {
-        if (cloud.authenticated) await api.cloudLogout();
-        await clearCloudPreference();
-        snapshot.current = { revision: 0, data: null };
-        mode.current = "local";
-        setCurrent(local.current);
-        setCloud({ ...INITIAL_CLOUD, enabled: cloud.enabled });
+        try {
+          await api.cloudLogout();
+        } catch (error) {
+          if (!(error instanceof api.CloudError && error.status === 401))
+            throw error;
+        }
+        epoch.current++;
+        clearMemory();
+        setCloud((info) => ({
+          ...INITIAL,
+          enabled: info.enabled,
+          googleEnabled: info.googleEnabled,
+        }));
+        announceAuthChange();
       }),
-    [cloud.authenticated, cloud.enabled, serial, setCurrent],
+    [serial, clearMemory],
   );
   const startFresh = useCallback(() => update(() => emptyData()), [update]);
   return (
@@ -281,11 +343,14 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         data,
         loading,
         storageError,
+        cloud,
+        legacyCount,
+        canImportLegacy,
         update,
         startFresh,
-        cloud,
-        signIn,
-        startCloud,
+        signInGoogle,
+        refreshSession,
+        importLegacy,
         reloadCloud,
         leaveCloud,
       }}

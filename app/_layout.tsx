@@ -23,6 +23,7 @@ import {
   initManusRuntime,
   subscribeSafeAreaInsets,
 } from "@/lib/_core/manus-runtime";
+import { BudgetGate } from "@/components/budget/auth-gate";
 import { BudgetProvider } from "@/lib/budget/store";
 export const unstable_settings = { anchor: "(tabs)" };
 export default function RootLayout() {
@@ -51,16 +52,18 @@ export default function RootLayout() {
       <trpc.Provider client={trpcClient} queryClient={queryClient}>
         <QueryClientProvider client={queryClient}>
           <BudgetProvider>
-            <Stack
-              screenOptions={{
-                headerShown: false,
-                contentStyle: { backgroundColor: "#0D1422" },
-              }}
-            >
-              <Stack.Screen name="(tabs)" />
-              <Stack.Screen name="oauth/callback" />
-            </Stack>
-            <StatusBar style="light" />
+            <BudgetGate>
+              <Stack
+                screenOptions={{
+                  headerShown: false,
+                  contentStyle: { backgroundColor: "#0D1422" },
+                }}
+              >
+                <Stack.Screen name="(tabs)" />
+                <Stack.Screen name="oauth/callback" />
+              </Stack>
+              <StatusBar style="light" />
+            </BudgetGate>
           </BudgetProvider>
         </QueryClientProvider>
       </trpc.Provider>

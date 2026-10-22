@@ -5,11 +5,35 @@ import {
   type ResultSetHeader,
   type RowDataPacket,
 } from "mysql2/promise";
+import { randomUUID } from "node:crypto";
+import { GoogleAccountConflict, type GoogleIdentity } from "./google";
+import { emptyData } from "../../lib/budget/model";
 import type { BudgetData } from "../../lib/budget/model";
 
-export type Account = { id: string; email: string; passwordHash: string };
+export type Account = {
+  id: string;
+  email: string;
+  passwordHash: string;
+  legacyImportAllowed?: boolean;
+};
+export type SessionKind = "password" | "google";
 export type CloudDocument = { revision: number; data: BudgetData | null };
 export interface BudgetRepository {
+  addGoogleChallenge(
+    hash: string,
+    nonceHash: string,
+    expires: number,
+  ): Promise<void>;
+  consumeGoogleChallenge(
+    hash: string,
+    nonceHash: string,
+    now: number,
+  ): Promise<boolean>;
+  googleAccount(
+    identity: GoogleIdentity,
+    legacyOwnerEmail: string,
+    now: number,
+  ): Promise<Account>;
   account(email: string): Promise<Account | null>;
   createAccount(account: Account, now: number): Promise<void>;
   allowLogin(bucket: string, now: number): Promise<boolean>;
@@ -17,9 +41,14 @@ export interface BudgetRepository {
     hash: string,
     accountId: string,
     expires: number,
+    kind?: SessionKind,
   ): Promise<void>;
-  session(hash: string, now: number): Promise<Account | null>;
-  deleteSession(hash: string): Promise<void>;
+  session(
+    hash: string,
+    now: number,
+    kind?: SessionKind,
+  ): Promise<Account | null>;
+  deleteSession(hash: string, kind?: SessionKind): Promise<void>;
   read(accountId: string): Promise<CloudDocument>;
   write(
     accountId: string,
@@ -105,20 +134,38 @@ export class MysqlBudgetRepository implements BudgetRepository {
     );
     return Number(rows[0].attempts) <= 20;
   }
-  async createSession(hash: string, accountId: string, expires: number) {
+  async createSession(
+    hash: string,
+    accountId: string,
+    expires: number,
+    kind: SessionKind = "password",
+  ) {
+    const table =
+      kind === "google"
+        ? "budget_cloud_google_sessions"
+        : "budget_cloud_sessions";
+    await this.pool.execute(`DELETE FROM ${table} WHERE expires_at_ms <= ?`, [
+      Date.now(),
+    ]);
     await this.pool.execute(
-      "DELETE FROM budget_cloud_sessions WHERE expires_at_ms <= ?",
-      [Date.now()],
-    );
-    await this.pool.execute(
-      "INSERT INTO budget_cloud_sessions (token_hash,account_id,expires_at_ms) VALUES (?,?,?)",
+      `INSERT INTO ${table} (token_hash,account_id,expires_at_ms) VALUES (?,?,?)`,
       [hash, accountId, expires],
     );
   }
-  async session(hash: string, now: number): Promise<Account | null> {
+  async session(
+    hash: string,
+    now: number,
+    kind: SessionKind = "password",
+  ): Promise<Account | null> {
+    const table =
+      kind === "google"
+        ? "budget_cloud_google_sessions"
+        : "budget_cloud_sessions";
     const [rows] = await this.pool.execute<RowDataPacket[]>(
-      `SELECT a.id,a.email,a.password_hash FROM budget_cloud_sessions s
-       JOIN budget_cloud_accounts a ON a.id=s.account_id WHERE s.token_hash=? AND s.expires_at_ms>?`,
+      `SELECT a.id,a.email,a.password_hash${kind === "google" ? ",g.legacy_import_allowed" : ""} FROM ${table} s
+       JOIN budget_cloud_accounts a ON a.id=s.account_id
+       ${kind === "google" ? "JOIN budget_cloud_google_identities g ON g.account_id=a.id" : ""}
+       WHERE s.token_hash=? AND s.expires_at_ms>?`,
       [hash, now],
     );
     return rows[0]
@@ -126,14 +173,128 @@ export class MysqlBudgetRepository implements BudgetRepository {
           id: rows[0].id,
           email: rows[0].email,
           passwordHash: rows[0].password_hash,
+          ...(kind === "google"
+            ? { legacyImportAllowed: Boolean(rows[0].legacy_import_allowed) }
+            : {}),
         }
       : null;
   }
-  async deleteSession(hash: string) {
+  async deleteSession(hash: string, kind: SessionKind = "password") {
+    const table =
+      kind === "google"
+        ? "budget_cloud_google_sessions"
+        : "budget_cloud_sessions";
+    await this.pool.execute(`DELETE FROM ${table} WHERE token_hash=?`, [hash]);
+  }
+  async addGoogleChallenge(hash: string, nonceHash: string, expires: number) {
     await this.pool.execute(
-      "DELETE FROM budget_cloud_sessions WHERE token_hash=?",
-      [hash],
+      "DELETE FROM budget_cloud_google_challenges WHERE expires_at_ms <= ?",
+      [Date.now()],
     );
+    await this.pool.execute(
+      "INSERT INTO budget_cloud_google_challenges (token_hash,nonce_hash,expires_at_ms) VALUES (?,?,?)",
+      [hash, nonceHash, expires],
+    );
+  }
+  async consumeGoogleChallenge(hash: string, nonceHash: string, now: number) {
+    const [result] = await this.pool.execute<ResultSetHeader>(
+      "DELETE FROM budget_cloud_google_challenges WHERE token_hash=? AND nonce_hash=? AND expires_at_ms>?",
+      [hash, nonceHash, now],
+    );
+    return result.affectedRows === 1;
+  }
+  async googleAccount(
+    identity: GoogleIdentity,
+    legacyOwnerEmail: string,
+    now: number,
+  ): Promise<Account> {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const connection = await this.pool.getConnection();
+      try {
+        await connection.beginTransaction();
+        const [linked] = await connection.execute<RowDataPacket[]>(
+          "SELECT a.id,a.email,a.password_hash,g.legacy_import_allowed FROM budget_cloud_google_identities g JOIN budget_cloud_accounts a ON a.id=g.account_id WHERE g.google_subject=?",
+          [identity.subject],
+        );
+        let account: Account;
+        if (linked[0]) {
+          account = {
+            id: linked[0].id,
+            email: linked[0].email,
+            passwordHash: linked[0].password_hash,
+            legacyImportAllowed: Boolean(linked[0].legacy_import_allowed),
+          };
+        } else {
+          const [existing] = await connection.execute<RowDataPacket[]>(
+            "SELECT a.id,a.email,a.password_hash,g.google_subject,g.legacy_import_allowed FROM budget_cloud_accounts a LEFT JOIN budget_cloud_google_identities g ON g.account_id=a.id WHERE a.email=? FOR UPDATE",
+            [identity.email],
+          );
+          const row = existing[0];
+          if (row?.google_subject === identity.subject) {
+            // A concurrent first login may have committed after our initial
+            // snapshot read. The locking read above sees its matching identity.
+            account = {
+              id: row.id,
+              email: row.email,
+              passwordHash: row.password_hash,
+              legacyImportAllowed: Boolean(row.legacy_import_allowed),
+            };
+          } else {
+            if (
+              row &&
+              (row.google_subject ||
+                identity.email !== legacyOwnerEmail ||
+                !identity.authoritativeEmail ||
+                !String(row.password_hash).startsWith("scrypt-v1:"))
+            )
+              throw new GoogleAccountConflict();
+            account = row
+              ? {
+                  id: row.id,
+                  email: row.email,
+                  passwordHash: row.password_hash,
+                }
+              : { id: randomUUID(), email: identity.email, passwordHash: "" };
+            account.legacyImportAllowed =
+              identity.email === legacyOwnerEmail &&
+              identity.authoritativeEmail;
+            if (!row)
+              await connection.execute(
+                "INSERT INTO budget_cloud_accounts (id,email,password_hash,created_at_ms) VALUES (?,?,?,?)",
+                [account.id, account.email, account.passwordHash, now],
+              );
+            await connection.execute(
+              "INSERT INTO budget_cloud_google_identities (google_subject,account_id,display_name,legacy_import_allowed) VALUES (?,?,?,?)",
+              [
+                identity.subject,
+                account.id,
+                identity.name,
+                account.legacyImportAllowed,
+              ],
+            );
+          }
+        }
+        await connection.execute(
+          "INSERT IGNORE INTO budget_cloud_documents (account_id,revision,document,updated_at_ms) VALUES (?,1,?,?)",
+          [account.id, JSON.stringify(emptyData()), now],
+        );
+        await connection.commit();
+        return account;
+      } catch (error) {
+        await connection.rollback();
+        if (
+          attempt < 2 &&
+          ["ER_DUP_ENTRY", "ER_LOCK_DEADLOCK", "ER_LOCK_WAIT_TIMEOUT"].includes(
+            (error as { code?: string }).code || "",
+          )
+        )
+          continue;
+        throw error;
+      } finally {
+        connection.release();
+      }
+    }
+    throw new Error("Account could not be created");
   }
   async read(accountId: string): Promise<CloudDocument> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(

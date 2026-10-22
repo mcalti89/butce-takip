@@ -66,3 +66,13 @@ Vercel build, bağlantı ayarı varsa önce idempotent şemayı ve gerçek SQL k
 çalıştırır; hata olursa yeni sürüm yayımlanmaz. Ardından web/PWA çıktısı üretilir.
 Yerel `build:pwa` komutu şema değiştirmez. Her SQL kontrolü kendine ait geçici test
 hesabını temizler; kullanıcı bütçeleri test edilmek üzere değiştirilmez.
+
+## Google ile çok kullanıcılı giriş
+
+Google yapılandırması [GOOGLE-AUTH.md](GOOGLE-AUTH.md) içindedir. Production'da
+`BUDGET_GOOGLE_CLIENT_ID` tanımlandığında yalnızca Google oturumları kabul edilir;
+web bütçe ekranı da bu oturumun arkasındadır. Yeni kullanıcılar `demo:false` boş
+bütçeyle oluşturulur. Önceki sahibin belgeleri korunur. SQL kontrolü bu modda yerel
+imzalı test sağlayıcısıyla iki ayrı hesabı sınar ve gerçek Google JWKS erişimini
+Production build sırasında kontrol eder. Gerçek kullanıcı onayıyla Google popup
+akışı kullanıcının kendi tarayıcısında tamamlanır.

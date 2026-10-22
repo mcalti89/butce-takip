@@ -146,7 +146,7 @@ export default function PwaPanel({ compact = false }: { compact?: boolean }) {
                     ? "Çevrim içi · uygulama kabuğu hazır"
                     : "Çevrim içi · kabuk hazırlanıyor"
                   : "Geliştirme önizlemesi · çevrim dışı kabuk yayın sürümünde"
-                : "Çevrim dışı · yerel kayıtların bu cihazda"}
+                : "Çevrim dışı · hesap bağlantısı gerekli"}
             </Txt>
           </View>
           {!installed ? (
@@ -177,8 +177,8 @@ export default function PwaPanel({ compact = false }: { compact?: boolean }) {
         </View>
         {!compact ? (
           <Txt style={{ color: C.muted, fontSize: 11, marginTop: 12 }}>
-            Bağlantı simgesi internet durumunu gösterir. SQL oturumunu ve kayıt
-            konumunu Veri yönetimi bölümünden kontrol edebilirsin.
+            Bağlantı simgesi internet durumunu gösterir. Google oturumunu ve
+            kayıt konumunu Veri yönetimi bölümünden kontrol edebilirsin.
           </Txt>
         ) : null}
         {error ? (
@@ -213,10 +213,10 @@ export default function PwaPanel({ compact = false }: { compact?: boolean }) {
           </Txt>
           <Txt style={{ color: C.muted, fontSize: 13, marginTop: 14 }}>
             Yayın sürümünde ilk çevrim içi açılış ve kabuk hazırlığı
-            tamamlandıktan sonra yerel kayıtlarını çevrim dışı görebilirsin.
-            Finansal veriler service worker önbelleğine değil yerel veri alanına
-            yazılır. SQL bütçesi için internet ve açık oturum gerekir; çevrim
-            dışı değişiklikler sunucuya gönderilmek üzere biriktirilmez.
+            tamamlandıktan sonra uygulama kabuğu çevrim dışı açılabilir. Hesap
+            verileri service worker önbelleğine yazılmaz. Bütçeni açmak için
+            internet ve açık Google oturumu gerekir; çevrim dışı değişiklikler
+            sunucuya gönderilmek üzere biriktirilmez.
           </Txt>
           <Txt
             style={{
@@ -226,9 +226,8 @@ export default function PwaPanel({ compact = false }: { compact?: boolean }) {
               marginBottom: 18,
             }}
           >
-            Yerel modda kayıtlar bu cihazdadır. Başka cihazdan SQL bütçeni açmak
-            için aynı SQL hesabıyla giriş yap. Tam JSON yedeği tüm bütçeyi, CSV
-            ise yalnızca işlemleri içerir.
+            Başka cihazdan bütçeni açmak için aynı Google hesabıyla giriş yap.
+            Tam JSON yedeği tüm bütçeyi, CSV ise yalnızca işlemleri içerir.
           </Txt>
           <Button onPress={() => setHelp(false)} icon="check">
             Anladım

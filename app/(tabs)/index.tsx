@@ -232,7 +232,7 @@ export default function BudgetApp() {
       >
         <Brand />
         <ActivityIndicator color={C.green} />
-        <Txt style={{ color: C.muted }}>Yerel bütçen hazırlanıyor…</Txt>
+        <Txt style={{ color: C.muted }}>Hesabın hazırlanıyor…</Txt>
       </View>
     );
   return (
@@ -324,8 +324,8 @@ export default function BudgetApp() {
                   marginTop: 4,
                 }}
               >
-                Yerel bütçe veya hesabına özel SQL bütçesi. Veri yönetiminden
-                bağlantını kontrol et.
+                Google hesabına özel bütçen. Kayıtlarını farklı cihazlarda aynı
+                hesapla açabilirsin.
               </Txt>
             </Card>
             <View
@@ -387,11 +387,7 @@ export default function BudgetApp() {
                 >
                   <Icon name="shield" color={C.green} size={14} />
                   <Txt style={{ color: C.muted, fontSize: 10 }}>
-                    {cloud.mode === "cloud"
-                      ? "SQL & özel"
-                      : cloud.mode === "locked"
-                        ? "SQL · giriş gerekli"
-                        : "Yerel & özel"}
+                    Hesabına özel
                   </Txt>
                 </View>
               </View>
@@ -879,9 +875,10 @@ export default function BudgetApp() {
                       <Txt
                         style={{ color: C.muted, marginTop: 7, fontSize: 12 }}
                       >
-                        {cloud.mode === "cloud"
-                          ? "SQL modunda bütçen, oturum açtığın hesaba bağlı sunucuda saklanır. Cihazda önceki yerel bütçen ayrı kalır. Sunucu kayıtları service worker önbelleğine yazılmaz; internet bağlantısı gerekir."
-                          : "Yerel bütçen bu tarayıcının veya cihazın depolamasındadır. SQL’e geçişi onaylamadan bu kayıtlar sunucuya aktarılmaz. Tarayıcı verilerini silmek yerel kayıtlarını kaldırır."}
+                        Bütçen, Google ile giriş yaptığın hesaba bağlı sunucuda
+                        saklanır. Başka kullanıcılar bu kayıtlara erişemez. Eski
+                        cihaz kayıtların otomatik aktarılmaz; mevcut özgün kopya
+                        korunur. İnternet bağlantısı gerekir.
                         {
                           " Düzenli olarak tam JSON yedeği indir; CSV yalnızca işlemleri içerir."
                         }
@@ -1168,7 +1165,7 @@ export default function BudgetApp() {
         >
           <Txt style={{ color: C.muted, marginVertical: 18 }}>
             {dialog.kind === "delete"
-              ? `${dialog.transaction.description || "Seçili işlem"} · ${money(dialog.transaction.amount)} tutarındaki kayıt ${cloud.mode === "cloud" ? "SQL bütçenden" : "yerel verilerinden"} silinecek.`
+              ? `${dialog.transaction.description || "Seçili işlem"} · ${money(dialog.transaction.amount)} tutarındaki kayıt hesabından silinecek.`
               : `Bu moddaki ${data.transactions.length} işlem, özel kategoriler, bütçe limitleri ve tasarruf hedefleri kaldırılacak. Eklediğin kayıtlar varsa onlar da silinir; önce CSV dışa aktarabilirsin. CSV yalnızca işlemleri taşır.`}
           </Txt>
           <ErrorText message={confirmError} />

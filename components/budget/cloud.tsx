@@ -2,13 +2,17 @@ import React, { useState } from "react";
 import { View } from "react-native";
 import { useBudget } from "@/lib/budget/store";
 import { downloadBackup } from "@/lib/budget/backup";
-import { Button, C, Card, ErrorText, Field, Sheet, Txt } from "./ui";
-
+import { Button, C, Card, ErrorText, Sheet, Txt } from "./ui";
 export function CloudPanel({ compact = false }: { compact?: boolean }) {
-  const { data, cloud, signIn, startCloud, reloadCloud, leaveCloud } =
-    useBudget();
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const {
+    data,
+    cloud,
+    legacyCount,
+    canImportLegacy,
+    importLegacy,
+    reloadCloud,
+    leaveCloud,
+  } = useBudget();
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [confirm, setConfirm] = useState(false);
@@ -23,130 +27,88 @@ export function CloudPanel({ compact = false }: { compact?: boolean }) {
       setBusy(false);
     }
   }
-  if (compact && cloud.mode === "local") return null;
   return (
     <Card>
-      <View style={{ gap: 12 }}>
-        <Txt bold style={{ fontSize: 19 }}>
-          {cloud.mode === "cloud"
-            ? "SQL bütçen açık"
-            : cloud.mode === "locked"
-              ? "SQL oturumu bekleniyor"
-              : "Cihazlar arası SQL bütçesi"}
+      <View style={{ gap: compact ? 8 : 12 }}>
+        <Txt bold style={{ fontSize: compact ? 14 : 19 }}>
+          {compact ? "Google hesabın" : "Hesabım ve yedekler"}
         </Txt>
-        <Txt style={{ color: C.muted }}>
-          {cloud.mode === "cloud"
-            ? `${cloud.email ?? ""} · Kayıtlar SQL sunucusunda saklanır. Kaydetmek için internet gerekir. Diğer cihazdaki değişiklikler için son verileri yükle.`
-            : "Yerel kopyan korunur. SQL hesabına giriş yaptıktan sonra hangi bütçeyi açacağını seçebilirsin."}
+        <Txt style={{ color: C.muted, fontSize: compact ? 12 : 14 }}>
+          {cloud.email}
         </Txt>
-        {!cloud.enabled && (
-          <Txt style={{ color: C.amber }}>
-            Kalıcı SQL bağlantısı henüz yapılandırılmadı. Cihazındaki bütçeyi
-            kullanmaya devam edebilirsin.
+        {!compact && (
+          <Txt style={{ color: C.muted }}>
+            Bütçen bu hesaba özel saklanır. Başka bir cihazda aynı Google
+            hesabıyla giriş yapabilirsin. Değişiklikleri kaydetmek için internet
+            gerekir.
           </Txt>
         )}
-        {cloud.enabled && !cloud.authenticated && (
-          <>
-            <Field
-              label="SQL e-posta"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              autoComplete="email"
-              keyboardType="email-address"
-            />
-            <Field
-              label="SQL parola"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              autoComplete="current-password"
-            />
-            <Button
-              busy={busy}
-              disabled={!email || !password}
-              onPress={() =>
-                void run(async () => {
-                  await signIn(email, password);
-                  setPassword("");
-                })
-              }
-            >
-              SQL hesabına giriş yap
-            </Button>
-          </>
-        )}
-        {cloud.authenticated && cloud.mode !== "cloud" && (
-          <>
-            {cloud.remoteCount === null ? (
-              <>
-                <Button busy={busy} onPress={() => setConfirm(true)}>
-                  Bu cihazdaki kayıtları SQL’e aktar
-                </Button>
-                <Button
-                  kind="secondary"
-                  busy={busy}
-                  onPress={() => void run(() => startCloud(false))}
-                >
-                  SQL’de boş bütçe ile başla
-                </Button>
-              </>
-            ) : (
-              <Button
-                busy={busy}
-                onPress={() => void run(() => startCloud(false))}
-              >
-                Sunucudaki bütçeyi aç ({cloud.remoteCount} işlem)
-              </Button>
-            )}
-          </>
-        )}
-        {cloud.mode === "cloud" && (
+        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           <Button
             kind="secondary"
+            small={compact}
             busy={busy}
             onPress={() => void run(reloadCloud)}
           >
-            Sunucudaki son verileri yükle
+            Son verileri yükle
           </Button>
-        )}
-        {!compact && (
           <Button
-            kind="secondary"
+            kind="ghost"
+            small={compact}
             busy={busy}
-            disabled={cloud.mode === "locked"}
-            onPress={() => void run(() => downloadBackup(data))}
+            onPress={() => void run(leaveCloud)}
           >
-            Tam JSON yedeğini indir
+            Çıkış yap
           </Button>
+        </View>
+        {!compact && (
+          <>
+            <Button
+              kind="secondary"
+              busy={busy}
+              onPress={() => void run(() => downloadBackup(data))}
+            >
+              Tam JSON yedeğini indir
+            </Button>
+            {canImportLegacy && (
+              <>
+                <Txt style={{ color: C.amber }}>
+                  Bu cihazda önceki sürümden kalan {legacyCount} işlem
+                  bulunuyor. Hesabın şu an boş; istersen bu kayıtları
+                  aktarabilirsin.
+                </Txt>
+                <Button
+                  kind="secondary"
+                  busy={busy}
+                  onPress={() => setConfirm(true)}
+                >
+                  Eski bütçemi bu hesaba aktar
+                </Button>
+              </>
+            )}
+          </>
         )}
-        {(cloud.authenticated || cloud.mode === "locked") && (
-          <Button kind="ghost" busy={busy} onPress={() => void run(leaveCloud)}>
-            Oturumu kapat ve yerel bütçeye dön
-          </Button>
-        )}
-        <ErrorText message={error || cloud.error} />
+        <ErrorText message={error} />
       </View>
       {confirm && (
         <Sheet
-          title="Yerel bütçe SQL’e aktarılsın mı?"
+          title="Eski bütçen bu hesaba aktarılsın mı?"
           onClose={() => {
             if (!busy) setConfirm(false);
           }}
         >
           <Txt style={{ color: C.muted, marginVertical: 16 }}>
-            {data.transactions.length} işlem, {data.categories.length} kategori,
+            {cloud.email} hesabına {legacyCount} işlemle birlikte kategoriler,
             bütçeler, tasarruf hedefleri ve kur kayıtları aktarılır. Bu
-            cihazdaki özgün kopya korunur. Sunucuda mevcut bütçe varsa üzerine
+            cihazdaki özgün kopya korunur. Hesabında değişiklik varsa üzerine
             yazılmaz.
-            {data.demo ? " Dikkat: Bu bütçe örnek veriler içeriyor." : ""}
           </Txt>
           <ErrorText message={error} />
           <Button
             busy={busy}
             onPress={() =>
               void run(async () => {
-                await startCloud(true);
+                await importLegacy();
                 setConfirm(false);
               })
             }

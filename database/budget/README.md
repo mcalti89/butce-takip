@@ -1,106 +1,80 @@
-# Bütçe için MySQL bağlantısı
+# Kişisel bütçe veritabanı
 
-Bu özellik web/PWA bütçesini, Vercel üzerindeki `/api/cloud` Node API’si aracılığıyla
-MySQL’e kaydeder. Tarayıcıya MySQL adresi, parolası veya yönetim belirteci gönderilmez.
-SQL yapılandırılmadığında mevcut yerel bütçe çalışır. Native uygulama yerel kalır.
+Web/PWA bütçeleri MySQL'de hesap kimliğiyle ayrılır. Oturum Google ile açılır;
+ayrıntılar [Google kurulumu](../../GOOGLE-AUTH.md) dosyasındadır. API Vercel üzerinde
+`/api/cloud` yolunda çalışır. MySQL adresi/parolası yalnızca sunucuda tutulur.
 
-## Kalıcı hizmet kurulumu
+## Sunucu ayarları
 
-Kullanıcının kendi hesabında standart MySQL 8 sağlayan bir hizmet (ör. Aiven) oluşturun.
-Hizmetin güncel ücretsiz planını, saklama ve yedekleme koşullarını hesabında kontrol edin;
-ücretli plan satın almak bu değişikliğin kapsamında değildir. Geliştirme Docker’ı kalıcı
-bulut veritabanı değildir. Vercel’in dosya sistemi de kişisel veriler için kullanılmaz.
+Vercel Production ortam değişkenleri:
 
-Vercel → `butcetakip-vercel-drop` → Settings → Environment Variables bölümünde,
-sadece sunucunun eriştiği Production değişkenlerini tanımlayın:
-
-| Değişken | Değer |
+| Değişken | Kullanım |
 | --- | --- |
-| `BUDGET_DATABASE_URL` | Sağlayıcının `mysql://kullanıcı:parola@sunucu:port/veritabanı` bağlantı URI’si |
-| `BUDGET_DATABASE_CA` | Sağlayıcının CA PEM sertifikası; genel kök sertifikayla doğrulanıyorsa gerekmeyebilir |
-| `BUDGET_OWNER_EMAIL` | Tek bütçe sahibinin giriş e-postası |
-| `BUDGET_OWNER_PASSWORD` | İlk hesap oluşturma için en az 12 karakterli güçlü parola |
-| `BUDGET_APP_ORIGIN` | İsteğe bağlı; varsayılan `https://butcetakip-vercel-drop.vercel.app` |
+| `BUDGET_DATABASE_URL` | Gerçek parolayı içeren `mysql://kullanıcı:parola@sunucu:port/veritabanı` URI'si |
+| `BUDGET_DATABASE_CA` | Sağlayıcının CA PEM sertifikası; genel kökle doğrulanıyorsa gerekmeyebilir |
+| `BUDGET_GOOGLE_CLIENT_ID` | Google Web application istemci kimliği |
+| `BUDGET_APP_ORIGIN` | Varsayılan `https://butcetakip-vercel-drop.vercel.app` |
+| `BUDGET_OWNER_EMAIL` | Yalnızca eski sahibin kayıtlarını koruyarak eşlemek için önceki e-posta |
 
-Değişkenleri kaydettikten sonra yeniden deploy gerekir. `EXPO_PUBLIC_` öneki kullanmayın.
-URI içerisindeki kullanıcı/parola özel karakterleri URL kodlamasıyla yazılmalıdır.
-SQL servisinde TLS ve sunucu kimliği doğrulanır; bağlantı URI’sindeki TLS kapatma
-bayrakları uygulanmaz. Production’da `BUDGET_DATABASE_TLS=local-only` yasaktır.
-Önizleme adreslerinden Production hesabına giriş varsayılan olarak engellenir;
-geliştirme/Preview için ayrı veritabanı, hesap ve tam `BUDGET_APP_ORIGIN` kullanın.
+Google modunda `BUDGET_OWNER_PASSWORD` kullanılmaz. Google devre dışıysa eski sunucu
+parola girişi geriye dönük operasyonel uyumluluk için kalır; yeni arayüz yalnızca
+Google hesabıyla açılır. Kimlik bilgileri `EXPO_PUBLIC_` değişkenlerine eklenmemelidir.
+Vercel ayarlarını değiştirdikten sonra yeniden deploy gerekir.
 
-Vercel yayını, `BUDGET_DATABASE_URL` tanımlıysa önce şemayı oluşturur, ardından
-gerçek veritabanında geçici ve rastgele bir test hesabıyla giriş, okuma/yazma,
-sürüm çatışması ve çıkış kontrollerini yapar. Test hesabı ve belgeleri sonunda
-silinir; gerçek sahibin bütçesine dokunulmaz. Şema veya test başarısızsa yayın durur.
-Giriş ayarları için 12–256 karakterli parola gerekir. Önizleme ortamında bağlantı
-yoksa bu SQL adımı atlanır.
+Aiven API'nin standart servis yanıtı parolayı maskeler. Yetkili kurulumda
+`?include_secrets=true` kullanılıp parolanın maskeli olmadığı kontrol edilmelidir.
+Maskeli URI gerçek bir bağlantı değildir. Gerçek değerleri hiçbir günlüğe veya Git'e
+yazmayın. URI kullanıcı/parola alanında özel karakterleri URL kodlamasıyla saklayın.
+TLS, CA ve sunucu kimliği doğrulanır; URL'deki TLS kapatma seçenekleri kullanılmaz.
 
-Manuel kurulum için [001-initial.sql](001-initial.sql) dosyasını sağlayıcının SQL
-konsolunda çalıştırın veya TLS bağlantı ayarları güvenli sunucu ortamında tanımlıyken:
+## Şema ve verinin saklanması
 
 ```sh
 pnpm db:budget
 ```
 
-Veritabanı bağlantısını yerel ortamdan değil Vercel build sunucusundan kurmak,
-Codex ortamında MySQL DNS/TCP erişiminin bulunmadığı durumda da kurulumu sağlar.
-`/api/cloud?action=status` yalnızca ayarın varlığını değil, gerçek tablo erişimini
-de doğrular; bağlantı hatasında 503 döner.
+Komut numaralı SQL dosyalarını sırayla çalıştırır, mevcut belgeleri değiştirmez.
+Vercel build bunu ve gerçek SQL doğrulamasını PWA build'inden önce çalıştırır;
+bağlantı veya kontroller başarısızsa yeni yayın durur. Google kontrolünde yalnızca
+rastgele sentetik hesaplar oluşturulup silinir. Codex ortamının MySQL DNS/TCP erişimi
+olmasa da Vercel build sunucusu bağlantıyı kurabilir. `/api/cloud?action=status`
+yapılandırmanın varlığından ayrı olarak gerçek tablo erişimini doğrular.
 
-Komut tekrar çalıştırılabilir; var olan bütçe belgelerinin üzerine yazmaz.
-Uygulama kullanıcısına ilgili dört tabloda SELECT/INSERT/UPDATE/DELETE izni verin;
-şema kurulumu için CREATE/REFERENCES yetkisi ayrıca gerekir.
+V1 bütçe belgesi MySQL JSON sütununda tutulur; işlemler ayrı SQL satırlarına
+normalleştirilmemiştir. Bu tasarım mevcut kategorileri, işlemleri, aylık bütçeleri,
+tasarruf hedeflerini ve geçmiş kur alanlarını kayıpsız korur. Bütçe hesabın UUID'sine
+bağlıdır; Google subject ayrı tabloda bu hesaba eşlenir. Sürüm kontrolü, eski sekmenin
+yeni veriyi ezmesini önler. Otomatik birleştirme veya gerçek zamanlı veri akışı yoktur.
+Diğer cihazdaki son kayıtları almak için “Son verileri yükle” kullanılır.
 
-Ardından uygulamada Veriler & kategoriler → SQL hesabına giriş yap. Giriş yapmak tek başına
-cihaz kayıtlarını yüklemez. İlk aktarımı onaylayın veya SQL’de boş bütçeyle başlayın.
-SQL’de zaten bütçe varsa sunucudaki bütçeyi açın. Yerel özgün kopya ayrı korunur.
-Yalnızca yapılandırılan bütçe sahibi giriş yapabilir; herkese açık kayıt yoktur.
-İlk girişte parola scrypt ile hashlenir. Sonraki girişler kayıtlı hash’i kullanır;
-bootstrap değişkenini değiştirmek mevcut hesap parolasını değiştirmez.
+SQL bütçesini açmak/kaydetmek için internet gerekir. Hesap verileri localStorage'a
+ve service worker önbelleğine yazılmaz. Oturum kapandığında bütçe ekranı kapanır;
+yazma sessizce yerel moda dönmez. Eski cihaz verisi otomatik aktarılmaz.
 
-## Saklama, oturum ve eşzamanlı değişiklikler
+## Yedekleme ve cPanel'e taşıma
 
-İlk sürüm tüm v1 bütçe belgesini MySQL JSON sütununda tutar; finansal tablolar ayrı
-satırlara normalleştirilmemiştir. Bu tercih mevcut kategoriler, işlemler, aylık
-bütçeler, tasarruf hedefleri ve geçmiş kur verilerinin kayıpsız taşınmasını sağlar.
-Her belge hesap kimliğiyle ayrılır. Yazmalar sürüm kontrolüyle atomiktir: aynı sürümü
-iki cihaz değiştirirse ikinci yazma 409 alır; kullanıcı son verileri yükleyip yeniden
-dener. Otomatik birleştirme veya arka planda anlık senkronizasyon yoktur.
+“Hesabım ve yedekler” bölümünden Tam JSON yedeği bütün bütçe alanlarını içerir;
+CSV yalnızca işlemleri içerir. JSON indirme otomatik geri yükleme veya otomatik
+sunucu yedeği değildir. Sağlayıcının yedeklerini ayrıca ayarlayın; yedekler kişisel
+finans verisi içerir ve güvenli tutulmalıdır.
 
-SQL bütçesi kaydetmek/açmak için internet gerektirir. Sunucu kayıtları localStorage’a
-ve service worker önbelleğine yazılmaz. Oturum biterse SQL bütçesi kilitlenir;
-yazma sessizce yerel bütçeye yönlendirilmez. Kaybolan HTTP yanıtından sonra kaydın
-sonucunu görmek için son verileri yükleyin. Yedi günlük HttpOnly/SameSite cookie
-kullanılır; Production’da Secure ve __Host- öneki uygulanır. Oturum belirteçlerinin
-sadece SHA-256 hashleri SQL’de tutulur. Girişler 15 dakikada 20 denemeyle sınırlandırılır.
+MySQL araçları veya sağlayıcı paneliyle tüm `budget_cloud_*` tablolarını SQL dump
+olarak alın. Kimlik tablolarını da ekleyin ki Google hesapları aynı bütçeleri açsın.
+TLS doğrulamasını etkin tutun; parolayı komut satırında açık argüman olarak yazmayın.
+`--no-tablespaces --set-gtid-purged=OFF --single-transaction` seçenekleri taşımayı
+kolaylaştırır. Önce ayrı veritabanına import edip doğrulayın; son dump sırasında
+uygulama yazmalarını durdurun. Yeni sunucuda oturum/challenge tablolarını boşaltıp
+yeniden giriş yaptırın; gerçek hesap, Google kimliği ve belgeleri koruyun.
 
-## Yedek ve ileride cPanel’e taşıma
+cPanel'de MySQL tek başına yeterli değildir. Bu Node API'nin barındırılması veya aynı
+Google JWT/nonce/oturum ve sürüm kontrollerini sağlayan PHP karşılığı gerekir.
+Uzak MySQL erişimi varsa Vercel API'si TLS ile cPanel'e bağlanabilir; paket desteği
+ve bağlantı o aşamada doğrulanır. Origin değişirse Google Authorized JavaScript
+origins ve `BUDGET_APP_ORIGIN` de güncellenir. TCMB cPanel API'si bundan ayrıdır.
 
-Veriler & kategoriler → Tam JSON yedeğini indir, bütçenin bütün alanlarını içerir.
-CSV dışa aktarımı yalnızca işlem tablosudur. JSON indirme, otomatik geri yükleme
-özelliği veya otomatik sunucu yedeği anlamına gelmez. Sağlayıcı yedeklerini ayrıca
-ayarlayın. İndirilen yedek kişisel finans bilgileri içerir; güvenli saklayın.
+## Ayrı geliştirme veritabanı
 
-MySQL araçları veya sağlayıcı paneliyle dört `budget_cloud_*` tablosunun SQL dışa
-aktarımını alın. Komut satırında parolayı argümanda yazmadan `-p` istemini kullanın;
-TLS doğrulama ve sağlayıcının CA dosyasını etkin tutun. `--no-tablespaces`,
-`--set-gtid-purged=OFF`, `--single-transaction` seçenekleri paylaşımlı hostinge taşımayı
-kolaylaştırır. Eski tablo/verileri önce yedekleyin; importu ayrı bir veritabanında
-doğrulayın. Taşıma sırasında yazmaları durdurup son bir dump alın; iki etkin veritabanı
-arasında bölünmüş kayıt oluşturmayın. Restore sonrası oturum tablosunu temizleyip
-yeniden giriş yapın; parola hash’i korunabilir.
-
-cPanel’de MySQL oluşturmak tek başına bu statik PWA’yı bağlamaz. Bu API’nin Node.js
-barındırılması veya aynı oturum/sürüm kontrollerini sağlayan PHP karşılığının
-kurulması gerekir. cPanel dış MySQL erişimi sunuyorsa Vercel API’si TLS üzerinden
-oraya bağlanabilir. Paket desteği ve TLS erişimi o aşamada doğrulanmalıdır. Domain
-ve API origin ayarı değişir; kullanıcıya ait yerel kayıtlar alan adları arasında
-kendiliğinden taşınmaz. TCMB cPanel API’si bu kişisel bütçe API’sinden ayrıdır.
-
-## Geliştirme ve gerçek SQL testleri
-
-Yalnızca sahte veriler için, loopback’e bağlı test MySQL’i:
+Yalnızca sahte verilerle, loopback'e bağlı geliştirme servisi:
 
 ```sh
 docker start butce-mysql-dev
@@ -112,22 +86,24 @@ docker start butce-mysql-dev
 export BUDGET_DATABASE_URL=mysql://root@127.0.0.1:3307/butce_development
 export BUDGET_DATABASE_TLS=local-only
 pnpm db:budget
-# BUDGET_OWNER_EMAIL ve BUDGET_OWNER_PASSWORD yalnızca sahte geliştirme hesabına ait olmalı.
 pnpm dev
 ```
 
-Docker ve çalışan süreçler sonraki Codex ortamında var kabul edilmemelidir.
-Kalıcı gerçek verileri bu şifresiz yerel test servisine koymayın. SQL testleri
-**yalnızca açıkça belirtilen localhost/butce_test** veritabanındaki test kayıtlarını
-siler; başka ada veya uzak sunucuya bağlanmayı reddeder:
+`local-only` yalnızca loopback ve nonproduction bağlantılarda kabul edilir. Gerçek
+kişisel verileri bu şifresiz test sunucusuna koymayın. Docker süreçleri snapshot'tan
+sonra çalışıyor varsayılmamalıdır; `docker exec butce-mysql-dev mysqladmin ping` ile
+hazır oluşunu kontrol edin. Gerçek Google girişini yerelde denemek için ayrı test
+istemcisi ve izinli localhost origin'i gerekir.
+
+SQL testleri yalnızca açıkça belirtilen `localhost/butce_test` veritabanını kullanır
+ve bu test veritabanının bütçe hesaplarını temizler:
 
 ```sh
 docker exec butce-mysql-dev mysql -e 'CREATE DATABASE IF NOT EXISTS butce_test;'
 BUDGET_TEST_DATABASE_URL=mysql://root@127.0.0.1:3307/butce_test pnpm test
 ```
 
-Bağlantı verilmezse sekiz gerçek SQL testi atlanır; bu durumda SQL entegrasyonu
-çalıştırılmış sayılmaz. Şema için `db:push` kullanmayın; o komut Manus başlangıç
-projesinin farklı kullanıcı şemasına aittir. Codex’in HTTPS proxy sırları ham TCP
-MySQL parolası yerine kullanılamaz; gerçek bağlantı bilgileri hedef sunucunun güvenli
-ayarlarında tutulmalıdır.
+Bağlantı belirtilmezse SQL testleri atlanır; çalıştırılmış sayılmaz. Google JWT birim
+testleri ağ bağlantısı olmadan yerel imza anahtarlarıyla doğrulanır. `db:push`, Manus
+başlangıç şemasına aittir; bütçe tabloları için kullanılmaz. Codex HTTPS proxy sırları
+ham MySQL TCP parolası değildir; Production ayarları güvenli Vercel ortamında kalır.

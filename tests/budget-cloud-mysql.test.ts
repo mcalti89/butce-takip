@@ -1,11 +1,17 @@
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPool, type Pool, type RowDataPacket } from "mysql2/promise";
-import { readFile } from "node:fs/promises";
+import { readFile, readdir } from "node:fs/promises";
 import type { Server } from "node:http";
 import { randomUUID } from "node:crypto";
 import { createBudgetApp } from "../server/budget/app";
 import { databaseOptions, MysqlBudgetRepository } from "../server/budget/mysql";
-import { demoData } from "../lib/budget/model";
+import { createLocalJWKSet, exportJWK, generateKeyPair, SignJWT } from "jose";
+import {
+  makeGoogleVerifier,
+  GoogleAccountConflict,
+} from "../server/budget/google";
+import { hashPassword, tokenHash } from "../server/budget/security";
+import { emptyData, demoData } from "../lib/budget/model";
 
 // Only an explicitly supplied disposable local database may run this destructive suite.
 const databaseUrl = process.env.BUDGET_TEST_DATABASE_URL;
@@ -15,6 +21,7 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
   let server: Server;
   let origin: string;
   let cookie = "";
+  let ownerId = "";
   const email = "owner@example.test";
   const password = "synthetic-only-test-password";
   const data = demoData();
@@ -49,20 +56,22 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
         NODE_ENV: "test",
       })!,
     );
-    for (const statement of (
-      await readFile(
-        new URL("../database/budget/001-initial.sql", import.meta.url),
-        "utf8",
-      )
-    )
-      .split(";")
-      .filter((s) => s.trim()))
-      await pool.query(statement);
+    const directory = new URL("../database/budget/", import.meta.url);
+    for (const file of (await readdir(directory))
+      .filter((n) => /^\d+-.*\.sql$/.test(n))
+      .sort()) {
+      for (const statement of (await readFile(new URL(file, directory), "utf8"))
+        .split(";")
+        .filter((s) => s.trim()))
+        await pool.query(statement);
+    }
+    await pool.query("DELETE FROM budget_cloud_google_challenges");
     await pool.query("DELETE FROM budget_cloud_accounts");
     await pool.query("DELETE FROM budget_cloud_login_limits");
     repository = new MysqlBudgetRepository(pool);
     const app = createBudgetApp({
       repository,
+      googleClientId: "",
       ownerEmail: email,
       ownerPassword: password,
       production: false,
@@ -99,6 +108,7 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
   it("hesap oluşturur, parolayı ve oturum belirtecini açık saklamaz", async () => {
     const result = await post("login", { email, password });
     expect(result.status).toBe(200);
+    ownerId = (await result.json()).accountId;
     const header = result.headers.get("set-cookie")!;
     expect(header).toContain("HttpOnly");
     expect(header).toContain("SameSite=Lax");
@@ -113,6 +123,7 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
     expect(sessions[0].token_hash).toMatch(/^[a-f0-9]{64}$/);
     expect(sessions[0].token_hash).not.toBe(cookie.split("=")[1]);
     expect(await (await request("data")).json()).toEqual({
+      accountId: ownerId,
       revision: 0,
       data: null,
     });
@@ -121,7 +132,11 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
     data.savingsGoals = { "2026-10": 30000 };
     data.trackedCurrencies = ["USD", "EUR"];
     expect((await post("data", { revision: 0, data })).status).toBe(200);
-    expect(await (await request("data")).json()).toEqual({ revision: 1, data });
+    expect(await (await request("data")).json()).toEqual({
+      accountId: ownerId,
+      revision: 1,
+      data,
+    });
   });
   it("eşzamanlı iki yazmanın birini kabul eder, eski verinin yeniyi ezmesini engeller", async () => {
     const results = await Promise.all([
@@ -142,7 +157,7 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
     );
     expect(
       (await post("data", { revision: 2, accountId: other, data })).status,
-    ).toBe(200);
+    ).toBe(409);
     expect(await repository.read(other)).toEqual({ revision: 0, data: null });
   });
   it("oturum süresini ve çıkışını sunucuda uygular", async () => {
@@ -164,5 +179,355 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
       expect(await repository.allowLogin(key, now)).toBe(true);
     expect(await repository.allowLogin(key, now)).toBe(false);
     expect(await repository.allowLogin(key, now + 900001)).toBe(true);
+  });
+
+  describe("Google ile çok kullanıcılı bütçe", () => {
+    let googleServer: Server;
+    let base: string;
+    let key: CryptoKey;
+    const googleOrigin = "https://budget.example.test";
+    const clientId = "mysql-test.apps.googleusercontent.com";
+    const legacyEmail = "legacy-owner@gmail.com";
+    let alice: {
+      accountId: string;
+      cookie: string;
+      credential: string;
+      challenge: string;
+    };
+    let bob: typeof alice;
+    async function call(
+      action: string,
+      body?: unknown,
+      auth = "",
+      source = googleOrigin,
+    ) {
+      return fetch(`${base}/api/cloud?action=${action}`, {
+        method: body === undefined ? "GET" : "POST",
+        headers: {
+          ...(auth ? { Cookie: auth } : {}),
+          ...(body === undefined
+            ? {}
+            : { Origin: source, "Content-Type": "application/json" }),
+        },
+        ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      });
+    }
+    async function challenge() {
+      const response = await call("google-config");
+      expect(response.status).toBe(200);
+      return {
+        ...(await response.json()),
+        cookie: response.headers
+          .getSetCookie()
+          .find((h) => h.startsWith("__Host-budget_google_challenge_"))!
+          .split(";")[0],
+      } as { clientId: string; nonce: string; cookie: string };
+    }
+    async function signed(
+      subject: string,
+      email: string,
+      nonce: string,
+      overrides: Record<string, unknown> = {},
+    ) {
+      return new SignJWT({ email, email_verified: true, nonce, ...overrides })
+        .setProtectedHeader({ alg: "RS256", kid: "mysql-test" })
+        .setIssuer("https://accounts.google.com")
+        .setAudience(clientId)
+        .setSubject(subject)
+        .setIssuedAt()
+        .setExpirationTime("5m")
+        .sign(key);
+    }
+    async function login(subject: string, email: string) {
+      const config = await challenge();
+      const credential = await signed(subject, email, config.nonce);
+      const response = await call(
+        "google-login",
+        { credential },
+        config.cookie,
+      );
+      expect(response.status).toBe(200);
+      const header = response.headers
+        .getSetCookie()
+        .find((h) => h.startsWith("__Host-budget_google_session="))!;
+      expect(header).toContain("HttpOnly");
+      expect(header).toContain("Secure");
+      expect(header).toContain("SameSite=Lax");
+      return {
+        accountId: (await response.json()).accountId as string,
+        cookie: header.split(";")[0],
+        credential,
+        challenge: config.cookie,
+      };
+    }
+    beforeAll(async () => {
+      const pair = await generateKeyPair("RS256");
+      key = pair.privateKey;
+      const verifier = makeGoogleVerifier(
+        clientId,
+        createLocalJWKSet({
+          keys: [
+            {
+              ...(await exportJWK(pair.publicKey)),
+              kid: "mysql-test",
+              alg: "RS256",
+            },
+          ],
+        }),
+      );
+      googleServer = createBudgetApp({
+        repository,
+        ownerEmail: legacyEmail,
+        googleClientId: clientId,
+        googleVerifier: verifier,
+        origin: googleOrigin,
+        production: true,
+      }).listen(0, "127.0.0.1");
+      await new Promise<void>((resolve) =>
+        googleServer.once("listening", resolve),
+      );
+      const address = googleServer.address();
+      base = `http://127.0.0.1:${typeof address === "object" && address ? address.port : 0}`;
+    });
+    afterAll(async () => {
+      if (googleServer) {
+        googleServer.closeAllConnections();
+        await new Promise<void>((resolve) =>
+          googleServer.close(() => resolve()),
+        );
+      }
+    });
+    it("girişten önce verileri kapatır, parola girişini Google modunda devre dışı bırakır", async () => {
+      expect((await call("data")).status).toBe(401);
+      expect((await call("login", { email, password })).status).toBe(410);
+      expect(await (await call("status")).json()).toMatchObject({
+        googleEnabled: true,
+        authenticated: false,
+      });
+      await repository.createSession(
+        tokenHash("old-password-session"),
+        ownerId,
+        Date.now() + 60000,
+      );
+      expect(
+        (
+          await call(
+            "data",
+            undefined,
+            "__Host-budget_session=old-password-session",
+          )
+        ).status,
+      ).toBe(401);
+    });
+    it("yabancı origin, geçersiz imza ve yanlış nonce kayıt oluşturamaz", async () => {
+      const c = await challenge();
+      const jwt = await signed(
+        "invalid-login",
+        "invalid-login@gmail.com",
+        c.nonce,
+      );
+      expect(
+        (
+          await call(
+            "google-login",
+            { credential: jwt },
+            c.cookie,
+            "https://evil.example",
+          )
+        ).status,
+      ).toBe(403);
+      expect(
+        (await call("google-login", { credential: "not-a-jwt" }, c.cookie))
+          .status,
+      ).toBe(401);
+      expect(
+        (
+          await call(
+            "google-login",
+            {
+              credential: await signed(
+                "invalid-login",
+                "invalid-login@gmail.com",
+                "z".repeat(43),
+              ),
+            },
+            c.cookie,
+          )
+        ).status,
+      ).toBe(401);
+      expect(await repository.account("invalid-login@gmail.com")).toBe(null);
+    });
+    it("ilk Google kullanıcısını boş bütçeyle oluşturur", async () => {
+      alice = await login("google-alice", "alice@gmail.com");
+      const result = await (await call("data", undefined, alice.cookie)).json();
+      expect(result).toEqual({
+        accountId: alice.accountId,
+        revision: 1,
+        data: emptyData(),
+      });
+      expect((await repository.account("alice@gmail.com"))!.passwordHash).toBe(
+        "",
+      );
+    });
+    it("ikinci kullanıcı ilk kullanıcının kayıtlarını göremez", async () => {
+      const data = emptyData();
+      data.transactions = [
+        {
+          id: "alice-expense",
+          type: "expense",
+          categoryId: "market",
+          date: "2026-10-22",
+          amount: 75,
+          description: "Alice only",
+        },
+      ];
+      expect(
+        (
+          await call(
+            "data",
+            { accountId: alice.accountId, revision: 1, data },
+            alice.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      bob = await login("google-bob", "bob@gmail.com");
+      expect(bob.accountId).not.toBe(alice.accountId);
+      expect(await (await call("data", undefined, bob.cookie)).json()).toEqual({
+        accountId: bob.accountId,
+        revision: 1,
+        data: emptyData(),
+      });
+    });
+    it("hesap kimliğini değiştirerek veya eski sekmeden başka hesaba yazmayı engeller", async () => {
+      expect(
+        (
+          await call(
+            "data",
+            { accountId: alice.accountId, revision: 1, data: emptyData() },
+            bob.cookie,
+          )
+        ).status,
+      ).toBe(409);
+      const stale = await call(
+        "data",
+        { accountId: alice.accountId, revision: 2, data: emptyData() },
+        bob.cookie,
+      );
+      expect((await stale.json()).code).toBe("ACCOUNT_CHANGED");
+      expect(
+        (await call("data", { revision: 1, data: emptyData() }, bob.cookie))
+          .status,
+      ).toBe(409);
+      expect(
+        (await repository.read(alice.accountId)).data!.transactions[0]
+          .description,
+      ).toBe("Alice only");
+      expect((await repository.read(bob.accountId)).data).toEqual(emptyData());
+    });
+    it("kullanılmış ve süresi dolmuş giriş isteğini tekrar kabul etmez", async () => {
+      expect(
+        (
+          await call(
+            "google-login",
+            { credential: alice.credential },
+            alice.challenge,
+          )
+        ).status,
+      ).toBe(401);
+      const c = await challenge();
+      await pool.execute(
+        "UPDATE budget_cloud_google_challenges SET expires_at_ms=1 WHERE token_hash=?",
+        [tokenHash(c.cookie.split("=")[1])],
+      );
+      expect(
+        (
+          await call(
+            "google-login",
+            {
+              credential: await signed(
+                "expired-sub",
+                "expired@gmail.com",
+                c.nonce,
+              ),
+            },
+            c.cookie,
+          )
+        ).status,
+      ).toBe(401);
+    });
+    it("Google subject sabit kaldığında e-posta değişse de aynı bütçeyi açar", async () => {
+      const again = await login("google-alice", "alice-new@gmail.com");
+      expect(again.accountId).toBe(alice.accountId);
+      expect(
+        (await (await call("data", undefined, again.cookie)).json()).data
+          .transactions[0].description,
+      ).toBe("Alice only");
+    });
+    it("eşzamanlı ilk girişte aynı kullanıcı için iki bütçe oluşturmaz", async () => {
+      const results = await Promise.all([
+        login("google-race", "google-race@gmail.com"),
+        login("google-race", "google-race@gmail.com"),
+      ]);
+      expect(results[0].accountId).toBe(results[1].accountId);
+    });
+    it("doğrulanmış eski sahibin bütçesini Google hesabıyla kayıpsız eşler", async () => {
+      const id = randomUUID();
+      const original = demoData();
+      await repository.createAccount(
+        { id, email: legacyEmail, passwordHash: await hashPassword(password) },
+        Date.now(),
+      );
+      await repository.write(id, 0, original, Date.now());
+      const linked = await login("google-legacy-owner", legacyEmail);
+      expect(linked.accountId).toBe(id);
+      expect((await repository.read(id)).data).toEqual(original);
+      expect(
+        (await (await call("status", undefined, linked.cookie)).json())
+          .legacyImportAllowed,
+      ).toBe(true);
+      const c = await challenge();
+      expect(
+        (
+          await call(
+            "google-login",
+            {
+              credential: await signed(
+                "different-subject-same-email",
+                legacyEmail,
+                c.nonce,
+              ),
+            },
+            c.cookie,
+          )
+        ).status,
+      ).toBe(409);
+      expect((await repository.read(id)).data).toEqual(original);
+    });
+    it("üçüncü taraf e-posta doğrulaması eski parola hesabını sahiplenmeye yetmez", async () => {
+      const id = randomUUID();
+      const email = "old-owner@example.com";
+      await repository.createAccount(
+        { id, email, passwordHash: await hashPassword(password) },
+        Date.now(),
+      );
+      await expect(
+        repository.googleAccount(
+          {
+            subject: "untrusted-email-sub",
+            email,
+            name: "",
+            nonce: "n".repeat(43),
+            authoritativeEmail: false,
+          },
+          email,
+          Date.now(),
+        ),
+      ).rejects.toBeInstanceOf(GoogleAccountConflict);
+    });
+    it("çıkış yalnızca ilgili oturumu kapatır", async () => {
+      expect((await call("logout", {}, bob.cookie)).status).toBe(200);
+      expect((await call("data", undefined, bob.cookie)).status).toBe(401);
+      expect((await call("data", undefined, alice.cookie)).status).toBe(200);
+    });
   });
 });
