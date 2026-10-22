@@ -23,9 +23,16 @@ async function main() {
     await connection.end();
   }
 }
-main().catch(() => {
+main().catch((error: unknown) => {
   console.error(
     "SQL şeması hazırlanamadı. Bağlantı, TLS ve veritabanı yetkilerini kontrol et.",
+  );
+  const code = (error as { code?: unknown })?.code;
+  console.error(
+    "SQL hata kodu:",
+    typeof code === "string" && /^[A-Z0-9_]{1,80}$/.test(code)
+      ? code
+      : "SQL_CONFIGURATION_ERROR",
   );
   process.exitCode = 1;
 });
