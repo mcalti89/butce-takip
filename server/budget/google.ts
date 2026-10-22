@@ -1,4 +1,4 @@
-import { createRemoteJWKSet, jwtVerify, type JWTVerifyGetKey } from "jose";
+import type { JWTVerifyGetKey } from "jose";
 
 export type GoogleIdentity = {
   subject: string;
@@ -7,17 +7,21 @@ export type GoogleIdentity = {
   nonce: string;
   authoritativeEmail: boolean;
 };
-const googleKeys = createRemoteJWKSet(
-  new URL("https://www.googleapis.com/oauth2/v3/certs"),
-  { timeoutDuration: 10000 },
-);
+let googleKeys: JWTVerifyGetKey | undefined;
 export type GoogleVerifier = (credential: string) => Promise<GoogleIdentity>;
 export function makeGoogleVerifier(
   clientId: string,
-  keys: JWTVerifyGetKey = googleKeys,
+  keys?: JWTVerifyGetKey,
 ): GoogleVerifier {
   return async (credential) => {
-    const { payload } = await jwtVerify(credential, keys, {
+    // Vercel emits this function as CommonJS; jose v6 is ESM-only.
+    // Native import() also keeps the remote key cache shared across requests.
+    const { createRemoteJWKSet, jwtVerify } = await import("jose");
+    const verificationKeys = keys ?? (googleKeys ??= createRemoteJWKSet(
+      new URL("https://www.googleapis.com/oauth2/v3/certs"),
+      { timeoutDuration: 10000 },
+    ));
+    const { payload } = await jwtVerify(credential, verificationKeys, {
       algorithms: ["RS256"],
       issuer: ["https://accounts.google.com", "accounts.google.com"],
       audience: clientId,

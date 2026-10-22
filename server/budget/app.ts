@@ -1,4 +1,3 @@
-import { decodeJwt } from "jose";
 import express, { type Request, type Response } from "express";
 import { parse as parseCookies } from "cookie";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -184,6 +183,7 @@ export function createBudgetApp(options: Options = {}) {
         let claimedNonce = "";
         if (typeof credential === "string" && credential.length <= 8192) {
           try {
+            const { decodeJwt } = await import("jose");
             const value = decodeJwt(credential).nonce;
             if (typeof value === "string" && /^[A-Za-z0-9_-]{43}$/.test(value))
               claimedNonce = value;
