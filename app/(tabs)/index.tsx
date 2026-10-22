@@ -124,6 +124,7 @@ export default function BudgetApp() {
   const insets = useSafeAreaInsets();
   const mobile = width < 720;
   const desktop = width >= 1080;
+  const stackedHeader = mobile || width - (desktop ? 278 : 60) < 780;
   const [page, setPage] = useState<Page>("overview");
   const [accountOpen, setAccountOpen] = useState(false);
   const [month, setMonth] = useState(monthKey());
@@ -415,9 +416,9 @@ export default function BudgetApp() {
             ) : null}
             <View
               style={{
-                flexDirection: mobile ? "column" : "row",
+                flexDirection: stackedHeader ? "column" : "row",
                 justifyContent: "space-between",
-                alignItems: mobile ? "stretch" : "center",
+                alignItems: stackedHeader ? "stretch" : "center",
                 gap: 18,
               }}
             >
@@ -473,13 +474,57 @@ export default function BudgetApp() {
                 </Txt>
               </View>
               {page === "settings" ? null : page !== "data" && page !== "fx" ? (
-                <Button
-                  icon="plus"
-                  onPress={() => setDialog({ kind: "transaction" })}
-                  style={{ alignSelf: mobile ? "flex-start" : undefined }}
+                <View
+                  style={{
+                    flexDirection: "row",
+                    flexWrap: "wrap",
+                    alignItems: "center",
+                    gap: mobile ? 8 : 12,
+                    maxWidth: "100%",
+                  }}
                 >
-                  İşlem ekle
-                </Button>
+                  <View
+                    style={{
+                      flexDirection: "row",
+                      alignItems: "center",
+                      gap: 5,
+                      backgroundColor: C.panel,
+                      borderWidth: 1,
+                      borderColor: C.border,
+                      borderRadius: 10,
+                      paddingHorizontal: 4,
+                    }}
+                  >
+                    <IconButton
+                      name="chevron-left"
+                      label="Önceki ay"
+                      onPress={() => setMonth((m) => shiftMonth(m, -1))}
+                    />
+                    {!mobile ? <Icon name="calendar" size={15} /> : null}
+                    <Txt
+                      bold
+                      style={{
+                        minWidth: mobile ? 84 : 102,
+                        textAlign: "center",
+                        fontSize: 12,
+                      }}
+                    >
+                      {monthLabel(month)}
+                    </Txt>
+                    <IconButton
+                      name="chevron-right"
+                      label="Sonraki ay"
+                      onPress={() => setMonth((m) => shiftMonth(m, 1))}
+                    />
+                  </View>
+                  <Button
+                    icon="plus"
+                    small={mobile}
+                    onPress={() => setDialog({ kind: "transaction" })}
+                  >
+                    İşlem ekle
+                  </Button>
+                </View>
               ) : (
                 <Button
                   icon="plus"
@@ -533,55 +578,6 @@ export default function BudgetApp() {
             ) : null}
             {Platform.OS === "web" ? (
               <PwaPanel visible={page === "settings"} />
-            ) : null}
-            {page !== "data" && page !== "fx" && page !== "settings" ? (
-              <View style={styles.between}>
-                <View
-                  style={{
-                    flexDirection: "row",
-                    alignItems: "center",
-                    gap: 5,
-                    backgroundColor: C.panel,
-                    borderWidth: 1,
-                    borderColor: C.border,
-                    borderRadius: 10,
-                    paddingHorizontal: 4,
-                  }}
-                >
-                  <IconButton
-                    name="chevron-left"
-                    label="Önceki ay"
-                    onPress={() => setMonth((m) => shiftMonth(m, -1))}
-                  />
-                  <Icon name="calendar" size={15} />
-                  <Txt
-                    bold
-                    style={{ minWidth: 102, textAlign: "center", fontSize: 12 }}
-                  >
-                    {monthLabel(month)}
-                  </Txt>
-                  <IconButton
-                    name="chevron-right"
-                    label="Sonraki ay"
-                    onPress={() => setMonth((m) => shiftMonth(m, 1))}
-                  />
-                </View>
-                <View
-                  style={{ flexDirection: "row", alignItems: "center", gap: 7 }}
-                >
-                  <View
-                    style={{
-                      height: 5,
-                      width: 5,
-                      borderRadius: 3,
-                      backgroundColor: C.green,
-                    }}
-                  />
-                  <Txt style={{ fontSize: 10, color: C.dim }}>
-                    {month === monthKey() ? "Bu ay" : "Seçili ay"}
-                  </Txt>
-                </View>
-              </View>
             ) : null}
             {page === "overview" ? (
               <>
