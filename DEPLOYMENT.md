@@ -76,3 +76,8 @@ bütçeyle oluşturulur. Önceki sahibin belgeleri korunur. SQL kontrolü bu mod
 imzalı test sağlayıcısıyla iki ayrı hesabı sınar ve gerçek Google JWKS erişimini
 Production build sırasında kontrol eder. Gerçek kullanıcı onayıyla Google popup
 akışı kullanıcının kendi tarayıcısında tamamlanır.
+
+TCMB günlük kur arşivi artık Vercel/MySQL üzerinde çalışır. `/api/fx` aynı
+kökenden kur okur; `/api/fx-sync` Production cron görevine ayrılmıştır. Günlük
+görev için yalnızca sunucuda `CRON_SECRET` gerekir. Build ilk kur arşivini doldurur;
+kurulum, zamanlama ve veri taşıma ayrıntıları: [TCMB-ARCHIVE.md](docs/TCMB-ARCHIVE.md).

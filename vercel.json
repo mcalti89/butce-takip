@@ -75,11 +75,23 @@
   ],
   "framework": null,
   "installCommand": "npx --yes pnpm@9.12.0 install --frozen-lockfile",
-  "buildCommand": "if [ -n \"$BUDGET_DATABASE_URL\" ]; then npx --yes pnpm@9.12.0 db:budget && npx --yes pnpm@9.12.0 exec tsx scripts/verify-budget-deployment.ts; else true; fi && EXPO_NO_TELEMETRY=1 npx --yes pnpm@9.12.0 build:pwa",
+  "buildCommand": "if [ -n \"$BUDGET_DATABASE_URL\" ]; then npx --yes pnpm@9.12.0 db:budget && npx --yes pnpm@9.12.0 exec tsx scripts/verify-budget-deployment.ts && npx --yes pnpm@9.12.0 exec tsx scripts/sync-fx-archive.ts; else true; fi && EXPO_NO_TELEMETRY=1 npx --yes pnpm@9.12.0 build:pwa",
   "outputDirectory": "web-dist",
   "functions": {
     "api/cloud.ts": {
       "maxDuration": 30
+    },
+    "api/fx.ts": {
+      "maxDuration": 60
+    },
+    "api/fx-sync.ts": {
+      "maxDuration": 60
     }
-  }
+  },
+  "crons": [
+    {
+      "path": "/api/fx-sync",
+      "schedule": "0 13 * * *"
+    }
+  ]
 }

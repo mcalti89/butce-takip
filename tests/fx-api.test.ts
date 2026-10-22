@@ -1,12 +1,12 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { fetchFxRate, fetchLatestFx } from "../lib/budget/fxApi";
+import { fetchFxRate, fetchLatestFx, fxApiUrl } from "../lib/budget/fxApi";
 
 afterEach(() => {
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
 });
 
-describe("cPanel FX API istemcisi", () => {
+describe("FX API istemcisi", () => {
   it("en son oran endpoint'ini çağırıp PDO sayı dizelerini doğrulanmış kur tipine çevirir", async () => {
     vi.stubEnv("EXPO_PUBLIC_FX_API_URL", "https://api.example.test/fx-api.php");
     vi.stubGlobal(
@@ -70,7 +70,13 @@ describe("cPanel FX API istemcisi", () => {
   it("API alan adı bağlanmadıysa gerçek bir kur varmış gibi yanıt vermez", async () => {
     vi.stubEnv("EXPO_PUBLIC_FX_API_URL", "");
     await expect(fetchLatestFx(["USD"])).rejects.toThrow(
-      "cPanel API kurulumu bekleniyor",
+      "kur API adresi gerekli",
     );
   });
+});
+
+it("web istemcisi varsayılan olarak aynı kökendeki FX API kullanır", () => {
+  vi.stubEnv("EXPO_PUBLIC_FX_API_URL", "");
+  vi.stubGlobal("window", {});
+  expect(fxApiUrl()).toBe("/api/fx");
 });

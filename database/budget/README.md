@@ -107,3 +107,8 @@ Bağlantı belirtilmezse SQL testleri atlanır; çalıştırılmış sayılmaz. 
 testleri ağ bağlantısı olmadan yerel imza anahtarlarıyla doğrulanır. `db:push`, Manus
 başlangıç şemasına aittir; bütçe tabloları için kullanılmaz. Codex HTTPS proxy sırları
 ham MySQL TCP parolası değildir; Production ayarları güvenli Vercel ortamında kalır.
+
+`003-fx-archive.sql` herkese açık TCMB bültenlerini kişisel bütçe belgelerinden
+ayrı tutar. `fx_bulletins`, `fx_daily_rates`, `fx_unpublished_days`,
+`fx_sync_state` tablolarını kurar. Kur geçmişi kullanıcı bütçe belgelerine otomatik
+yazılmaz. [TCMB arşivi ve cron](../../docs/TCMB-ARCHIVE.md) belgesine bakın.

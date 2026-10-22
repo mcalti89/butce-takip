@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { createCorsMiddleware } from "./cors";
 import { clearLegacySessionCookie } from "./cookies";
 import budgetCloudApp from "../budget/app";
+import fxApp from "../fx/app";
 
 async function startServer() {
   const app = express();
@@ -17,6 +18,7 @@ async function startServer() {
   app.use(createCorsMiddleware());
   app.use(clearLegacySessionCookie());
   app.use(budgetCloudApp);
+  app.use(fxApp);
 
   app.use(express.json({ limit: "50mb" }));
   app.use(express.urlencoded({ limit: "50mb", extended: true }));

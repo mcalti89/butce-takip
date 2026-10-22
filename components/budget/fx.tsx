@@ -12,13 +12,13 @@ import {
   CURRENCY_NAMES,
   DEFAULT_TRACKED_CURRENCIES,
   FxCurrencyCode,
-  mergeFxRates,
   TCMB_CURRENCY_CODES,
 } from "@/lib/budget/fx";
 import {
   fetchFxHistory,
   fetchLatestFx,
   isFxApiConfigured,
+  type LatestFxResponse,
 } from "@/lib/budget/fxApi";
 import { Button, C, Card, Icon, Txt, styles } from "./ui";
 
@@ -42,48 +42,43 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
     (selected[0] || "USD") as FxCurrencyCode,
   );
   const [remoteHistory, setRemoteHistory] = useState<typeof localRates>([]);
+  const [remoteLatest, setRemoteLatest] = useState<typeof localRates>([]);
+  const [archive, setArchive] = useState<LatestFxResponse["archive"]>();
+  const [historyLimit, setHistoryLimit] = useState(12);
 
   const latestByCode = useMemo(() => {
     const rows = new Map<string, (typeof localRates)[number]>();
-    for (const quote of localRates)
+    for (const quote of [...remoteLatest, ...localRates])
       if (!rows.has(quote.currency)) rows.set(quote.currency, quote);
     return rows;
-  }, [localRates]);
+  }, [localRates, remoteLatest]);
 
   const fetchLatest = useCallback(async () => {
     const codes = selectedKey
       ? (selectedKey.split(",") as FxCurrencyCode[])
       : [];
     if (!configured || !codes.length) return null;
-    const result = await fetchLatestFx(codes);
-    await update((d) => ({
-      ...d,
-      fxRates: mergeFxRates(d.fxRates, result.rates),
-    }));
-    return result.date;
-  }, [configured, selectedKey, update]);
+    return fetchLatestFx(codes);
+  }, [configured, selectedKey]);
 
-  const fetchHistory = useCallback(
-    async (code: FxCurrencyCode) => {
-      const result = await fetchFxHistory(
-        code,
-        `${shiftMonth(monthKey(), -3)}-01`,
-        today(),
-      );
-      await update((d) => ({
-        ...d,
-        fxRates: mergeFxRates(d.fxRates, result.rates),
-      }));
-      return result.rates;
-    },
-    [update],
-  );
+  const fetchHistory = useCallback(async (code: FxCurrencyCode) => {
+    const result = await fetchFxHistory(
+      code,
+      `${shiftMonth(monthKey(), -3)}-01`,
+      today(),
+    );
+    return result.rates;
+  }, []);
 
   useEffect(() => {
     let active = true;
     void fetchLatest()
-      .then((date) => {
-        if (active && date) setMessage(`TCMB ${date} bülteni güncellendi.`);
+      .then((result) => {
+        if (active && result) {
+          setRemoteLatest(result.rates);
+          setArchive(result.archive);
+          setMessage(`TCMB ${result.date} bülteni güncellendi.`);
+        }
       })
       .catch((error: Error) => {
         if (active) setMessage(error.message);
@@ -123,8 +118,13 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
     setBusy(true);
     setMessage("");
     try {
-      const date = await fetchLatest();
-      if (date) setMessage(`TCMB ${date} bülteni güncellendi.`);
+      const result = await fetchLatest();
+      if (result) {
+        setRemoteLatest(result.rates);
+        setArchive(result.archive);
+        setMessage(`TCMB ${result.date} bülteni güncellendi.`);
+        setRemoteHistory(await fetchHistory(activeHistoryCode));
+      }
     } catch (error) {
       setMessage((error as Error).message);
     } finally {
@@ -150,7 +150,7 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
   const history = (remoteHistory.length ? remoteHistory : localRates)
     .filter((row) => row.currency === activeHistoryCode)
     .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 12);
+    .slice(0, historyLimit);
 
   return (
     <View style={{ gap: 16 }}>
@@ -190,6 +190,9 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
                 Resmî döviz alış/satış bültenleri. Kaynak oranlar gösterge
                 değeridir; bankanın veya kartının gerçekleşen işlem fiyatı
                 değildir.
+                {
+                  " Her gün yayın sonrası otomatik arşivlenir. Hafta sonu ve resmî tatillerde son yayımlanan bülten gösterilir."
+                }
               </Txt>
             </View>
           </View>
@@ -224,10 +227,8 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
                 marginTop: 5,
               }}
             >
-              TCMB XML&apos;i tarayıcıdan doğrudan okunamadığı için bu cihaz
-              henüz günlük oran alamıyor. cPanel PHP/MySQL API&apos;si ve cron
-              kurulunca kur geçmişi burada görünecek; şu an günlük veritabanı
-              kaydı etkin değil.
+              Bu cihazın kur servisi henüz bağlanmamış. Web uygulamasındaki
+              günlük TCMB arşivini kullanmak için çevrim içi giriş yap.
             </Txt>
           </View>
         ) : null}
@@ -256,6 +257,15 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
         <Txt style={{ color: C.dim, fontSize: 10, marginTop: 13 }}>
           Kaynak: Türkiye Cumhuriyet Merkez Bankası · ForexBuying / ForexSelling
         </Txt>
+        {archive?.bulletinCount ? (
+          <Txt style={{ color: C.muted, fontSize: 11, marginTop: 8 }}>
+            SQL arşivi: {archive.firstDate} – {archive.latestDate} ·{" "}
+            {archive.bulletinCount} bülten
+            {archive.lastError
+              ? " · Kaynak yeniden denenecek; son arşiv gösteriliyor."
+              : ""}
+          </Txt>
+        ) : null}
       </Card>
 
       <Card>
@@ -268,7 +278,7 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
           </Txt>
         </View>
         <Txt style={{ color: C.muted, fontSize: 11, marginBottom: 14 }}>
-          Seçim bu tarayıcıda saklanır. Alış ve satış kurları ayrı gösterilir.
+          Seçim hesabında saklanır. Alış ve satış kurları ayrı gösterilir.
         </Txt>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           {TCMB_CURRENCY_CODES.map((code) => {
@@ -321,7 +331,7 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
           <Card style={{ padding: 17 }}>
             <Txt style={{ color: C.muted, fontSize: 12 }}>
               {selected.length
-                ? "Kur servisi bağlandığında seçtiğin dövizlerin son alış/satış değerleri burada gösterilecek."
+                ? "Seçtiğin dövizler için kur verisi bekleniyor. Güncelle düğmesiyle yeniden deneyebilirsin."
                 : "Başlamak için yukarıdan en az bir döviz türü seç."}
             </Txt>
           </Card>
@@ -415,6 +425,7 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
               onPress={() => {
                 if (activeHistoryCode === code) return;
                 setHistoryBusy(true);
+                setHistoryLimit(12);
                 setHistoryCode(code as FxCurrencyCode);
               }}
             >
@@ -459,6 +470,17 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
               : "Günlük veritabanı bağlantısı kurulunca geçmiş burada listelenecek."}
           </Txt>
         )}
+        {(remoteHistory.length ? remoteHistory : localRates).filter(
+          (r) => r.currency === activeHistoryCode,
+        ).length > historyLimit ? (
+          <Button
+            kind="ghost"
+            small
+            onPress={() => setHistoryLimit((n) => n + 12)}
+          >
+            Daha fazla göster
+          </Button>
+        ) : null}
       </Card>
 
       <Card style={{ backgroundColor: "#172639", borderColor: "#2F4661" }}>

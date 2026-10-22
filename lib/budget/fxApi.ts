@@ -4,6 +4,13 @@ export type LatestFxResponse = {
   date: string;
   source: "TCMB";
   rates: FxQuote[];
+  archive?: {
+    firstDate: string | null;
+    latestDate: string | null;
+    bulletinCount: number;
+    lastSuccessAt: string | null;
+    lastError: string | null;
+  };
 };
 
 export type FxHistoryResponse = {
@@ -18,11 +25,14 @@ export type FxRateResponse = {
 };
 
 export function fxApiUrl() {
-  return process.env.EXPO_PUBLIC_FX_API_URL?.trim().replace(/\/$/, "") || "";
+  return (
+    process.env.EXPO_PUBLIC_FX_API_URL?.trim().replace(/\/$/, "") ||
+    (typeof window !== "undefined" ? "/api/fx" : "")
+  );
 }
 
 export function isFxApiConfigured() {
-  return /^https:\/\//i.test(fxApiUrl());
+  return fxApiUrl() === "/api/fx" || /^https:\/\//i.test(fxApiUrl());
 }
 
 function normalizeQuote(value: Record<string, unknown>): FxQuote {
@@ -53,9 +63,10 @@ function normalizeQuote(value: Record<string, unknown>): FxQuote {
       value.banknote_selling ?? value.banknoteSelling,
     ),
     bulletinNo: String(value.bulletin_no || value.bulletinNo || ""),
-    fetchedAtUtc: value.fetched_at_utc
-      ? String(value.fetched_at_utc)
-      : undefined,
+    fetchedAtUtc:
+      (value.fetched_at_utc ?? value.fetchedAtUtc)
+        ? String(value.fetched_at_utc ?? value.fetchedAtUtc)
+        : undefined,
   };
 }
 
@@ -63,12 +74,13 @@ async function request<T>(query: URLSearchParams): Promise<T> {
   const base = fxApiUrl();
   if (!base)
     throw new Error(
-      "Kur servisi henüz bağlanmadı. Günlük kur veritabanı için cPanel API kurulumu bekleniyor.",
+      "Kur servisi henüz bağlanmadı. Bu cihaz için kur API adresi gerekli.",
     );
   let response: Response;
   try {
     response = await fetch(`${base}?${query.toString()}`, {
       headers: { Accept: "application/json" },
+      signal: AbortSignal.timeout(15000),
     });
   } catch {
     throw new Error(
@@ -100,6 +112,7 @@ export async function fetchLatestFx(
     date: string;
     source: "TCMB";
     rates: Record<string, unknown>[];
+    archive?: LatestFxResponse["archive"];
   }>(query);
   return { ...result, rates: result.rates.map(normalizeQuote) };
 }
