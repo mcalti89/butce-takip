@@ -1,8 +1,59 @@
-import React, { useState } from "react";
-import { View } from "react-native";
+import React, { useEffect, useState } from "react";
+import { Modal, Platform, Pressable, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useBudget } from "@/lib/budget/store";
 import { downloadBackup } from "@/lib/budget/backup";
-import { Button, C, Card, ErrorText, Sheet, Txt } from "./ui";
+import { Button, C, Card, ErrorText, IconButton, Sheet, Txt } from "./ui";
+
+export function AccountPopup({
+  desktop,
+  onClose,
+}: {
+  desktop: boolean;
+  onClose: () => void;
+}) {
+  const insets = useSafeAreaInsets();
+  useEffect(() => {
+    if (Platform.OS !== "web") return;
+    const dismiss = (event: KeyboardEvent) => {
+      if (event.key === "Escape") {
+        event.stopPropagation();
+        onClose();
+      }
+    };
+    document.addEventListener("keydown", dismiss);
+    return () => document.removeEventListener("keydown", dismiss);
+  }, [onClose]);
+  return (
+    <Modal transparent animationType="fade" onRequestClose={onClose}>
+      <View style={{ flex: 1 }}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel="Hesap menüsünü kapat"
+          onPress={onClose}
+          style={{ position: "absolute", inset: 0, backgroundColor: "#02060B66" }}
+        />
+        <View
+          accessibilityViewIsModal
+          style={{
+            position: "absolute",
+            width: 340,
+            maxWidth: "90%",
+            ...(desktop
+              ? { left: 20, bottom: 82 }
+              : { right: 18, top: Math.max(insets.top, 18) + 52 }),
+          }}
+        >
+          <CloudPanel compact />
+          <View style={{ position: "absolute", right: 8, top: 8 }}>
+            <IconButton name="x" label="Kapat" onPress={onClose} />
+          </View>
+        </View>
+      </View>
+    </Modal>
+  );
+}
+
 export function CloudPanel({ compact = false }: { compact?: boolean }) {
   const {
     data,

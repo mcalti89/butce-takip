@@ -52,7 +52,7 @@ import {
   ImportEditor,
   TransactionEditor,
 } from "@/components/budget/editors";
-import { CloudPanel } from "@/components/budget/cloud";
+import { AccountPopup, CloudPanel } from "@/components/budget/cloud";
 import PwaPanel from "@/components/budget/pwa";
 import { SavingsCard, SavingsEditor } from "@/components/budget/savings";
 import { FxDashboard } from "@/components/budget/fx";
@@ -119,13 +119,14 @@ function Brand({ small = false }: { small?: boolean }) {
 }
 
 export default function BudgetApp() {
-  const { data, loading, storageError, update, startFresh, cloud } =
+  const { data, loading, storageError, update, startFresh } =
     useBudget();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mobile = width < 720;
   const desktop = width >= 1080;
   const [page, setPage] = useState<Page>("overview");
+  const [accountOpen, setAccountOpen] = useState(false);
   const [month, setMonth] = useState(monthKey());
   const [dialog, setDialog] = useState<Dialog>(null);
   const [toast, setToast] = useState("");
@@ -328,7 +329,11 @@ export default function BudgetApp() {
                 hesapla açabilirsin.
               </Txt>
             </Card>
-            <View
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel="Hesap menüsü"
+              accessibilityState={{ expanded: accountOpen }}
+              onPress={() => setAccountOpen(true)}
               style={{
                 flexDirection: "row",
                 alignItems: "center",
@@ -356,7 +361,7 @@ export default function BudgetApp() {
                   TRY · Raporlama para birimi
                 </Txt>
               </View>
-            </View>
+            </Pressable>
           </View>
         </View>
       ) : null}
@@ -385,10 +390,11 @@ export default function BudgetApp() {
                 <View
                   style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
                 >
-                  <Icon name="shield" color={C.green} size={14} />
-                  <Txt style={{ color: C.muted, fontSize: 10 }}>
-                    Hesabına özel
-                  </Txt>
+                  <IconButton
+                    name="user"
+                    label="Hesap menüsü"
+                    onPress={() => setAccountOpen(true)}
+                  />
                 </View>
               </View>
             ) : null}
@@ -517,9 +523,6 @@ export default function BudgetApp() {
               <Card style={{ borderColor: C.red, padding: 14 }}>
                 <ErrorText message={storageError} />
               </Card>
-            ) : null}
-            {page !== "data" && cloud.mode !== "local" ? (
-              <CloudPanel compact />
             ) : null}
             {Platform.OS === "web" &&
             (page === "overview" || page === "data") ? (
@@ -1087,6 +1090,9 @@ export default function BudgetApp() {
           </View>
         ) : null}
       </View>
+      {accountOpen ? (
+        <AccountPopup desktop={desktop} onClose={() => setAccountOpen(false)} />
+      ) : null}
       {toast ? (
         <View
           accessibilityRole="alert"
