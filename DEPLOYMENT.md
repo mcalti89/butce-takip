@@ -56,3 +56,13 @@ Vercel erişim anahtarları ve diğer sırlar tarayıcı build'ine eklenmemelidi
 `VERCEL_TOKEN` bir yayın yönetim kimliğidir; uygulamanın çalışması için gereken
 bir frontend değişkeni değildir. Yerel finans verisini taşıma, sıfırlama veya
 bulut senkronizasyonu bu yayın akışının parçası değildir.
+
+## İsteğe bağlı kişisel MySQL bütçesi
+
+`api/cloud.ts`, statik PWA ile aynı origin üzerinde çalışan Node Vercel Function’dır.
+Sunucu kimlik bilgileri `BUDGET_*` ortam değişkenlerinde yalnızca Production’a
+verilir. Kurulum ve taşıma ayrıntıları [SQL belgesinde](database/budget/README.md).
+Vercel build, bağlantı ayarı varsa önce idempotent şemayı ve gerçek SQL kontrolünü
+çalıştırır; hata olursa yeni sürüm yayımlanmaz. Ardından web/PWA çıktısı üretilir.
+Yerel `build:pwa` komutu şema değiştirmez. Her SQL kontrolü kendine ait geçici test
+hesabını temizler; kullanıcı bütçeleri test edilmek üzere değiştirilmez.

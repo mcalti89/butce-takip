@@ -82,14 +82,12 @@ export function createBudgetApp(options: Options = {}) {
       const repository = options.repository ?? getBudgetRepository();
       const enabled = Boolean(repository && ownerEmail);
       if (!enabled)
-        return res
-          .status(action === "status" ? 200 : 503)
-          .json({
-            enabled: false,
-            authenticated: false,
-            error:
-              "SQL bağlantısı henüz yapılandırılmadı. Yerel kayıtlarını kullanabilirsin.",
-          });
+        return res.status(action === "status" ? 200 : 503).json({
+          enabled: false,
+          authenticated: false,
+          error:
+            "SQL bağlantısı henüz yapılandırılmadı. Yerel kayıtlarını kullanabilirsin.",
+        });
       const db = repository!;
       let sessionToken = "";
       try {
@@ -101,12 +99,16 @@ export function createBudgetApp(options: Options = {}) {
         sessionToken && sessionToken.length <= 128
           ? await db.session(tokenHash(sessionToken), Date.now())
           : null;
-      if (action === "status" && req.method === "GET")
+      if (action === "status" && req.method === "GET") {
+        // Also verify the schema/connection for a fresh, unauthenticated browser.
+        // A configured URL alone must not report a working SQL service.
+        if (!account) await db.account(ownerEmail);
         return res.json({
           enabled: true,
           authenticated: Boolean(account),
           ...(account ? { email: account.email } : {}),
         });
+      }
       if (action === "login" && req.method === "POST") {
         const email =
           typeof req.body?.email === "string"
@@ -123,11 +125,9 @@ export function createBudgetApp(options: Options = {}) {
           return res.status(401).json({ error: "E-posta veya parola hatalı." });
         // Account-wide persistent throttling works across serverless instances and IP changes.
         if (!(await db.allowLogin(tokenHash(ownerEmail), Date.now())))
-          return res
-            .status(429)
-            .json({
-              error: "Çok fazla giriş denemesi. 15 dakika sonra tekrar dene.",
-            });
+          return res.status(429).json({
+            error: "Çok fazla giriş denemesi. 15 dakika sonra tekrar dene.",
+          });
         let user = await db.account(email);
         if (
           !user &&
@@ -188,23 +188,19 @@ export function createBudgetApp(options: Options = {}) {
             .json({ error: "Bütçe verisi doğrulanamadı. Kayıt yapılmadı." });
         const next = await db.write(account.id, revision, data, Date.now());
         if (next === null)
-          return res
-            .status(409)
-            .json({
-              error:
-                "Başka bir cihaz veya sekme verileri güncelledi. Son verileri yükleyip değişikliğini tekrar uygula.",
-            });
+          return res.status(409).json({
+            error:
+              "Başka bir cihaz veya sekme verileri güncelledi. Son verileri yükleyip değişikliğini tekrar uygula.",
+          });
         return res.json({ revision: next });
       }
       return res.status(404).json({ error: "İşlem bulunamadı." });
     } catch {
       // Driver errors can contain credentials or queries; never return or log them.
-      return res
-        .status(503)
-        .json({
-          error:
-            "SQL hizmetine ulaşılamadı. Kayıt başarılı olarak gösterilmedi; bağlantıyı kontrol et.",
-        });
+      return res.status(503).json({
+        error:
+          "SQL hizmetine ulaşılamadı. Kayıt başarılı olarak gösterilmedi; bağlantıyı kontrol et.",
+      });
     }
   });
   app.use(
@@ -214,14 +210,12 @@ export function createBudgetApp(options: Options = {}) {
       res: Response,
       _next: express.NextFunction,
     ) => {
-      res
-        .status(error.type === "entity.too.large" ? 413 : 400)
-        .json({
-          error:
-            error.type === "entity.too.large"
-              ? "Bütçe belgesi en fazla 5 MB olabilir."
-              : "İstek okunamadı.",
-        });
+      res.status(error.type === "entity.too.large" ? 413 : 400).json({
+        error:
+          error.type === "entity.too.large"
+            ? "Bütçe belgesi en fazla 5 MB olabilir."
+            : "İstek okunamadı.",
+      });
     },
   );
   return app;

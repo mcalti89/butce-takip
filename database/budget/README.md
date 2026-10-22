@@ -29,12 +29,24 @@ bayrakları uygulanmaz. Production’da `BUDGET_DATABASE_TLS=local-only` yasakt�
 Önizleme adreslerinden Production hesabına giriş varsayılan olarak engellenir;
 geliştirme/Preview için ayrı veritabanı, hesap ve tam `BUDGET_APP_ORIGIN` kullanın.
 
-Önce [001-initial.sql](001-initial.sql) dosyasını sağlayıcının SQL konsolunda çalıştırın
-veya TLS bağlantı ayarları güvenli sunucu ortamında tanımlıyken:
+Vercel yayını, `BUDGET_DATABASE_URL` tanımlıysa önce şemayı oluşturur, ardından
+gerçek veritabanında geçici ve rastgele bir test hesabıyla giriş, okuma/yazma,
+sürüm çatışması ve çıkış kontrollerini yapar. Test hesabı ve belgeleri sonunda
+silinir; gerçek sahibin bütçesine dokunulmaz. Şema veya test başarısızsa yayın durur.
+Giriş ayarları için 12–256 karakterli parola gerekir. Önizleme ortamında bağlantı
+yoksa bu SQL adımı atlanır.
+
+Manuel kurulum için [001-initial.sql](001-initial.sql) dosyasını sağlayıcının SQL
+konsolunda çalıştırın veya TLS bağlantı ayarları güvenli sunucu ortamında tanımlıyken:
 
 ```sh
 pnpm db:budget
 ```
+
+Veritabanı bağlantısını yerel ortamdan değil Vercel build sunucusundan kurmak,
+Codex ortamında MySQL DNS/TCP erişiminin bulunmadığı durumda da kurulumu sağlar.
+`/api/cloud?action=status` yalnızca ayarın varlığını değil, gerçek tablo erişimini
+de doğrular; bağlantı hatasında 503 döner.
 
 Komut tekrar çalıştırılabilir; var olan bütçe belgelerinin üzerine yazmaz.
 Uygulama kullanıcısına ilgili dört tabloda SELECT/INSERT/UPDATE/DELETE izni verin;
