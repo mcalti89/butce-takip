@@ -9,6 +9,8 @@ export default function Root({ children }: PropsWithChildren) {
           name="viewport"
           content="width=device-width, initial-scale=1, viewport-fit=cover"
         />
+        <link rel="preconnect" href="https://accounts.google.com" />
+        <link rel="preconnect" href="https://www.gstatic.com" />
         <meta name="theme-color" content="#111827" />
         <meta name="application-name" content="Bütçe Takip" />
         <link rel="manifest" href="/manifest.webmanifest" />

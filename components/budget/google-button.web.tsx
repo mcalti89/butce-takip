@@ -1,71 +1,10 @@
-import React, { useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useRef, useState } from "react";
 import { ActivityIndicator, View } from "react-native";
 import { googleConfig } from "@/lib/budget/cloudApi";
 import { Button, C, ErrorText, Txt } from "./ui";
 
-type GoogleSdk = {
-  accounts: {
-    id: {
-      initialize: (options: {
-        client_id: string;
-        nonce: string;
-        auto_select: boolean;
-        callback: (response: { credential: string }) => void;
-      }) => void;
-      renderButton: (
-        element: HTMLElement,
-        options: Record<string, unknown>,
-      ) => void;
-      cancel: () => void;
-    };
-  };
-};
-declare global {
-  interface Window {
-    google?: GoogleSdk;
-  }
-}
-let sdkPromise: Promise<GoogleSdk> | undefined;
-function loadSdk() {
-  if (window.google?.accounts?.id) return Promise.resolve(window.google);
-  if (sdkPromise) return sdkPromise;
-  sdkPromise = new Promise<GoogleSdk>((resolve, reject) => {
-    const script = document.createElement("script");
-    const timeout = setTimeout(() => {
-      script.remove();
-      sdkPromise = undefined;
-      reject(
-        new Error(
-          "Google giriş ekranı yüklenemedi. İnternet bağlantını kontrol edip tekrar dene.",
-        ),
-      );
-    }, 15000);
-    script.src = "https://accounts.google.com/gsi/client";
-    script.async = true;
-    script.defer = true;
-    script.onload = () => {
-      clearTimeout(timeout);
-      if (window.google?.accounts?.id) resolve(window.google);
-      else {
-        sdkPromise = undefined;
-        script.remove();
-        reject(new Error("Google giriş ekranı açılamadı."));
-      }
-    };
-    script.onerror = () => {
-      clearTimeout(timeout);
-      sdkPromise = undefined;
-      script.remove();
-      reject(
-        new Error(
-          "Google’a ulaşılamadı. Bağlantını veya içerik engelleyicini kontrol et.",
-        ),
-      );
-    };
-    document.head.appendChild(script);
-  });
-  return sdkPromise;
-}
+import { GOOGLE_SDK_READY, loadGoogleSdk } from "@/lib/budget/googleSdk.web";
+
 export function GoogleButton({
   onCredential,
 }: {
@@ -76,11 +15,35 @@ export function GoogleButton({
   const [attempt, setAttempt] = useState(0);
   const [ready, setReady] = useState(false);
   const [error, setError] = useState("");
+  const [slow, setSlow] = useState(false);
+  const retry = useCallback(() => {
+    setReady(false);
+    setError("");
+    setSlow(false);
+    setAttempt((n) => n + 1);
+  }, []);
+  useEffect(() => {
+    const recover = () => {
+      if (!ready && error && document.visibilityState !== "hidden") retry();
+    };
+    window.addEventListener(GOOGLE_SDK_READY, recover);
+    window.addEventListener("online", recover);
+    document.addEventListener("visibilitychange", recover);
+    return () => {
+      window.removeEventListener(GOOGLE_SDK_READY, recover);
+      window.removeEventListener("online", recover);
+      document.removeEventListener("visibilitychange", recover);
+    };
+  }, [ready, error, retry]);
   useEffect(() => {
     let active = true;
-    void Promise.all([googleConfig(), loadSdk()])
+    const slowTimer = setTimeout(() => {
+      if (active) setSlow(true);
+    }, 8000);
+    void Promise.all([googleConfig(), loadGoogleSdk()])
       .then(([config, sdk]) => {
         if (!active || !container.current) return;
+        clearTimeout(slowTimer);
         sdk.accounts.id.initialize({
           client_id: config.clientId,
           nonce: config.nonce,
@@ -88,6 +51,7 @@ export function GoogleButton({
           callback: (response) => {
             if (!active || inFlight.current) return;
             inFlight.current = true;
+            setError("");
             void onCredential(response.credential)
               .catch((e) => {
                 if (active) {
@@ -113,10 +77,12 @@ export function GoogleButton({
         setReady(true);
       })
       .catch((e) => {
+        clearTimeout(slowTimer);
         if (active) setError((e as Error).message);
       });
     return () => {
       active = false;
+      clearTimeout(slowTimer);
     };
   }, [attempt, onCredential]);
   return (
@@ -124,21 +90,17 @@ export function GoogleButton({
       {!ready && !error && (
         <View style={{ flexDirection: "row", gap: 10, alignItems: "center" }}>
           <ActivityIndicator color={C.green} />
-          <Txt style={{ color: C.muted }}>Google bağlantısı hazırlanıyor…</Txt>
+          <Txt style={{ color: C.muted, flexShrink: 1 }}>
+            {slow
+              ? "Google bağlantısı biraz yavaş; giriş düğmesi hazırlanıyor…"
+              : "Google bağlantısı hazırlanıyor…"}
+          </Txt>
         </View>
       )}
       <div ref={container} style={{ minHeight: ready ? 44 : 0 }} />
       <ErrorText message={error} />
       {error && (
-        <Button
-          kind="secondary"
-          small
-          onPress={() => {
-            setReady(false);
-            setError("");
-            setAttempt((n) => n + 1);
-          }}
-        >
+        <Button kind="secondary" small onPress={retry}>
           Tekrar dene
         </Button>
       )}
