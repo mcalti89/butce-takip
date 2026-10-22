@@ -26,32 +26,34 @@ import { importCSV, ImportResult } from "@/lib/budget/csv";
 import { Button, C, ErrorText, Field, Icon, Sheet, Txt, styles } from "./ui";
 export function TransactionEditor({
   transaction,
+  draft,
   onClose,
   onDone,
   onDelete,
 }: {
   transaction?: Transaction;
+  draft?: Partial<Transaction>;
   onClose: () => void;
   onDone: (message: string) => void;
   onDelete: (transaction: Transaction) => void;
 }) {
   const { data, update } = useBudget();
-  const [type, setType] = useState<TransactionType>(
-    transaction?.type || "expense",
-  );
+  const initial = transaction ?? draft;
+  const [accountId, setAccountId] = useState(initial?.accountId ?? "");
+  const [type, setType] = useState<TransactionType>(initial?.type || "expense");
   const [amount, setAmount] = useState(
-    transaction ? String(transaction.amount).replace(".", ",") : "",
+    initial?.amount !== undefined
+      ? String(initial.amount).replace(".", ",")
+      : "",
   );
-  const [date, setDate] = useState(transaction?.date || today());
-  const [description, setDescription] = useState(
-    transaction?.description || "",
-  );
+  const [date, setDate] = useState(initial?.date || today());
+  const [description, setDescription] = useState(initial?.description || "");
   const [categoryId, setCategoryId] = useState(
-    transaction?.categoryId ||
+    initial?.categoryId ||
       data.categories.find((c) => c.type === "expense")?.id ||
       "",
   );
-  const [currency, setCurrency] = useState(transaction?.currency || "TRY");
+  const [currency, setCurrency] = useState(initial?.currency || "TRY");
   const [quotePreview, setQuotePreview] = useState<FxQuote | null>(null);
   const [quotePreviewRequestedDate, setQuotePreviewRequestedDate] =
     useState("");
@@ -118,7 +120,7 @@ export function TransactionEditor({
       setError("Geçerli bir tarih gir. Biçim: YYYY-MM-DD");
       return;
     }
-    if (currency !== "TRY" && date > today()) {
+    if ((currency !== "TRY" || initial?.planId) && date > today()) {
       setError("Döviz kuru gelecekteki bir işlem tarihi için kullanılamaz.");
       return;
     }
@@ -179,6 +181,11 @@ export function TransactionEditor({
         }
       }
       const entry: Transaction = {
+        ...(transaction ?? {}),
+        ...(initial?.planId
+          ? { planId: initial.planId, planIndex: initial.planIndex }
+          : {}),
+        accountId: accountId || undefined,
         id: transaction?.id || id(),
         type,
         amount: value,
@@ -189,12 +196,50 @@ export function TransactionEditor({
         ...fxSnapshot,
         ...(currency === "TRY" ? { baseAmount } : {}),
       };
-      await update((d) => ({
-        ...d,
-        transactions: transaction
-          ? d.transactions.map((t) => (t.id === entry.id ? entry : t))
-          : [...d.transactions, entry],
-      }));
+      await update((d) => {
+        const account = accountId
+          ? d.financialAccounts?.find((a) => a.id === accountId)
+          : undefined;
+        if (
+          accountId &&
+          (!account ||
+            account.currency !== currency ||
+            date < account.openingDate ||
+            account.archived)
+        )
+          throw new Error(
+            "İşlem için aynı para biriminde bir hesap ve takip başlangıcından sonraki bir tarih seç.",
+          );
+        if (
+          transaction?.accountId &&
+          d.financialAccounts?.some(
+            (a) => a.id === transaction.accountId && a.archived,
+          )
+        )
+          throw new Error("Düzenlemeden önce bağlı hesabı arşivden çıkar.");
+        if (transaction && !d.transactions.some((t) => t.id === transaction.id))
+          throw new Error("İşlem artık bulunamıyor; son verileri yükle.");
+        if (!transaction && initial?.planId) {
+          if (
+            !d.paymentPlans?.some((p) => p.id === initial.planId && !p.archived)
+          )
+            throw new Error("Bu plan kapatılmış veya artık bulunamıyor.");
+          if (
+            d.transactions.some(
+              (t) =>
+                t.planId === initial.planId &&
+                t.planIndex === initial.planIndex,
+            )
+          )
+            throw new Error("Bu dönem zaten işleme dönüştürülmüş.");
+        }
+        return {
+          ...d,
+          transactions: transaction
+            ? d.transactions.map((t) => (t.id === entry.id ? entry : t))
+            : [...d.transactions, entry],
+        };
+      });
       onDone(
         currency === "TRY"
           ? transaction
@@ -229,6 +274,7 @@ export function TransactionEditor({
           <Pressable
             key={t}
             accessibilityRole="button"
+            disabled={!!initial?.planId}
             onPress={() => changeType(t)}
             style={{
               flex: 1,
@@ -293,7 +339,15 @@ export function TransactionEditor({
               key={code}
               accessibilityRole="button"
               accessibilityState={{ selected: active }}
-              onPress={() => setCurrency(code)}
+              disabled={!!initial?.planId}
+              onPress={() => {
+                setCurrency(code);
+                if (
+                  data.financialAccounts?.find((a) => a.id === accountId)
+                    ?.currency !== code
+                )
+                  setAccountId("");
+              }}
               style={{
                 borderWidth: 1,
                 borderColor: active ? C.green : C.border,
@@ -383,6 +437,59 @@ export function TransactionEditor({
           }}
         >
           TCMB kuru gelecekteki tarihler için yayımlanmadı.
+        </Txt>
+      ) : null}
+      <Txt bold style={{ fontSize: 13, marginBottom: 10 }}>
+        Hesap
+      </Txt>
+      <View
+        style={{
+          flexDirection: "row",
+          flexWrap: "wrap",
+          gap: 6,
+          marginBottom: 18,
+        }}
+      >
+        <Button
+          small
+          kind={!accountId ? "secondary" : "ghost"}
+          onPress={() => setAccountId("")}
+          disabled={
+            !!initial?.planId &&
+            data.paymentPlans?.find((p) => p.id === initial.planId)?.kind ===
+              "installment"
+          }
+        >
+          Hesapsız
+        </Button>
+        {(data.financialAccounts ?? [])
+          .filter(
+            (a) =>
+              a.currency === currency &&
+              (!a.archived || a.id === initial?.accountId),
+          )
+          .map((a) => (
+            <Button
+              key={a.id}
+              small
+              kind={accountId === a.id ? "secondary" : "ghost"}
+              style={{ maxWidth: "100%" }}
+              onPress={() => setAccountId(a.id)}
+              disabled={
+                !!initial?.planId &&
+                data.paymentPlans?.find((p) => p.id === initial.planId)
+                  ?.kind === "installment" &&
+                a.id !== initial.accountId
+              }
+            >
+              {a.name}
+            </Button>
+          ))}
+      </View>
+      {initial?.planId ? (
+        <Txt style={{ color: C.muted, fontSize: 11, marginBottom: 12 }}>
+          Planlı dönem kaydediliyor. Aynı dönem ikinci kez işlenemez. İşlemi
+          silmek, aktif plandaki dönemi yeniden bekleyen duruma getirir.
         </Txt>
       ) : null}
       <Txt bold style={{ fontSize: 13, marginBottom: 10 }}>

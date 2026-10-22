@@ -19,6 +19,7 @@ import {
   monthLabel,
   shiftMonth,
   summarize,
+  today,
 } from "@/lib/budget/model";
 import {
   CSV_TEMPLATE,
@@ -56,16 +57,38 @@ import { AccountPopup, CloudPanel } from "@/components/budget/cloud";
 import PwaPanel from "@/components/budget/pwa";
 import { SavingsCard, SavingsEditor } from "@/components/budget/savings";
 import { FxDashboard } from "@/components/budget/fx";
+import {
+  AccountEditor,
+  AccountsDashboard,
+  PaymentCalendar,
+  PlanEditor,
+  TransferEditor,
+} from "@/components/budget/finance";
+import type { FinancialAccount, AccountTransfer } from "@/lib/budget/finance";
 
 type Page =
   | "overview"
   | "transactions"
   | "budgets"
   | "fx"
+  | "accounts"
+  | "calendar"
   | "data"
   | "settings";
 type Dialog =
-  | { kind: "transaction"; transaction?: Transaction }
+  | {
+      kind: "transaction";
+      transaction?: Transaction;
+      draft?: Partial<Transaction>;
+    }
+  | { kind: "account"; account?: FinancialAccount }
+  | {
+      kind: "transfer";
+      transfer?: AccountTransfer;
+      toId?: string;
+      amount?: number;
+    }
+  | { kind: "plan" }
   | { kind: "budget"; category: Category }
   | { kind: "category" }
   | { kind: "import"; text: string; result: ImportResult }
@@ -77,6 +100,13 @@ const NAV: { id: Page; title: string; short: string; icon: string }[] = [
   { id: "overview", title: "Genel bakış", short: "Pano", icon: "grid" },
   { id: "transactions", title: "İşlemler", short: "İşlemler", icon: "repeat" },
   { id: "budgets", title: "Bütçeler", short: "Bütçeler", icon: "target" },
+  {
+    id: "accounts",
+    title: "Hesaplar & kartlar",
+    short: "Hesaplar",
+    icon: "credit-card",
+  },
+  { id: "calendar", title: "Ödeme takvimi", short: "Takvim", icon: "calendar" },
   { id: "fx", title: "Döviz", short: "Döviz", icon: "dollar-sign" },
 ];
 function Brand({ small = false }: { small?: boolean }) {
@@ -120,12 +150,15 @@ function Brand({ small = false }: { small?: boolean }) {
 
 export default function BudgetApp() {
   const { data, loading, storageError, update, startFresh } = useBudget();
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mobile = width < 720;
   const desktop = width >= 1080;
   const stackedHeader = mobile || width - (desktop ? 278 : 60) < 780;
   const [page, setPage] = useState<Page>("overview");
+  const hasMonth = ["overview", "transactions", "budgets", "calendar"].includes(
+    page,
+  );
   const [accountOpen, setAccountOpen] = useState(false);
   const [month, setMonth] = useState(monthKey());
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -202,10 +235,22 @@ export default function BudgetApp() {
     try {
       if (dialog?.kind === "delete") {
         const target = dialog.transaction.id;
-        await update((d) => ({
-          ...d,
-          transactions: d.transactions.filter((t) => t.id !== target),
-        }));
+        await update((d) => {
+          const transaction = d.transactions.find((t) => t.id === target);
+          if (
+            transaction?.accountId &&
+            d.financialAccounts?.some(
+              (a) => a.id === transaction.accountId && a.archived,
+            )
+          )
+            throw new Error(
+              "İşlemi silmeden önce bağlı hesabı arşivden çıkar.",
+            );
+          return {
+            ...d,
+            transactions: d.transactions.filter((t) => t.id !== target),
+          };
+        });
         notify("İşlem silindi.");
       } else if (dialog?.kind === "fresh") {
         await startFresh();
@@ -271,6 +316,8 @@ export default function BudgetApp() {
               <Pressable
                 key={item.id}
                 accessibilityRole="button"
+                accessibilityLabel={item.title}
+                accessibilityState={{ selected: page === item.id }}
                 onPress={() => navigate(item.id)}
                 style={({ pressed }) => ({
                   flexDirection: "row",
@@ -307,29 +354,31 @@ export default function BudgetApp() {
             ))}
           </View>
           <View style={{ marginTop: "auto" }}>
-            <Card
-              style={{
-                backgroundColor: "#15231F",
-                borderColor: "#254638",
-                padding: 14,
-              }}
-            >
-              <Icon name="shield" color={C.green} size={19} />
-              <Txt bold style={{ marginTop: 9, fontSize: 12 }}>
-                Sadece sana ait.
-              </Txt>
-              <Txt
+            {height >= 900 ? (
+              <Card
                 style={{
-                  color: C.muted,
-                  fontSize: 10,
-                  lineHeight: 17,
-                  marginTop: 4,
+                  backgroundColor: "#15231F",
+                  borderColor: "#254638",
+                  padding: 14,
                 }}
               >
-                Google hesabına özel bütçen. Kayıtlarını farklı cihazlarda aynı
-                hesapla açabilirsin.
-              </Txt>
-            </Card>
+                <Icon name="shield" color={C.green} size={19} />
+                <Txt bold style={{ marginTop: 9, fontSize: 12 }}>
+                  Sadece sana ait.
+                </Txt>
+                <Txt
+                  style={{
+                    color: C.muted,
+                    fontSize: 10,
+                    lineHeight: 17,
+                    marginTop: 4,
+                  }}
+                >
+                  Google hesabına özel bütçen. Kayıtlarını farklı cihazlarda
+                  aynı hesapla açabilirsin.
+                </Txt>
+              </Card>
+            ) : null}
             <Pressable
               accessibilityRole="button"
               accessibilityLabel="Hesap menüsü"
@@ -455,9 +504,13 @@ export default function BudgetApp() {
                         ? "Planın ne kadar kaldı?"
                         : page === "fx"
                           ? "Döviz de, net gör."
-                          : page === "settings"
-                            ? "Ayarlar"
-                            : "Bütçen. Senin düzenin."}
+                          : page === "accounts"
+                            ? "Hesapların ve kartların."
+                            : page === "calendar"
+                              ? "Ödemelerini planla."
+                              : page === "settings"
+                                ? "Ayarlar"
+                                : "Bütçen. Senin düzenin."}
                 </Txt>
                 <Txt style={{ color: C.muted, fontSize: 12, marginTop: 3 }}>
                   {page === "overview"
@@ -468,12 +521,23 @@ export default function BudgetApp() {
                         ? "Kategori limitlerini aya özel belirle."
                         : page === "fx"
                           ? "TCMB alış ve satış kurlarını tarihleriyle izle."
-                          : page === "settings"
-                            ? "Uygulama kurulumu ve cihazında kullanım."
-                            : "Kategorilerini yönet, verilerini yanında taşı."}
+                          : page === "accounts"
+                            ? "Bakiyelerini ve transferlerini tek yerde gör."
+                            : page === "calendar"
+                              ? "Yaklaşan gelir, ödeme ve taksitlerini takip et."
+                              : page === "settings"
+                                ? "Uygulama kurulumu ve cihazında kullanım."
+                                : "Kategorilerini yönet, verilerini yanında taşı."}
                 </Txt>
               </View>
-              {page === "settings" ? null : page !== "data" && page !== "fx" ? (
+              {page === "accounts" ? (
+                <Button
+                  icon="plus"
+                  onPress={() => setDialog({ kind: "account" })}
+                >
+                  Hesap ekle
+                </Button>
+              ) : page === "settings" ? null : hasMonth ? (
                 <View
                   style={{
                     flexDirection: "row",
@@ -520,19 +584,25 @@ export default function BudgetApp() {
                   <Button
                     icon="plus"
                     small={mobile}
-                    onPress={() => setDialog({ kind: "transaction" })}
+                    onPress={() =>
+                      setDialog(
+                        page === "calendar"
+                          ? { kind: "plan" }
+                          : { kind: "transaction" },
+                      )
+                    }
                   >
-                    İşlem ekle
+                    {page === "calendar" ? "Plan ekle" : "İşlem ekle"}
                   </Button>
                 </View>
-              ) : (
+              ) : page === "data" ? (
                 <Button
                   icon="plus"
                   onPress={() => setDialog({ kind: "category" })}
                 >
                   Kategori ekle
                 </Button>
-              )}
+              ) : null}
             </View>
             {data.demo ? (
               <View
@@ -578,6 +648,42 @@ export default function BudgetApp() {
             ) : null}
             {Platform.OS === "web" ? (
               <PwaPanel visible={page === "settings"} />
+            ) : null}
+            {page === "accounts" ? (
+              <AccountsDashboard
+                onAccount={(account) => setDialog({ kind: "account", account })}
+                onTransfer={(draft) =>
+                  setDialog({ kind: "transfer", ...draft })
+                }
+              />
+            ) : null}
+            {page === "calendar" ? (
+              <PaymentCalendar
+                month={month}
+                onTransfer={(draft) =>
+                  setDialog({ kind: "transfer", ...draft })
+                }
+                onExecute={(o) =>
+                  setDialog({
+                    kind: "transaction",
+                    draft: {
+                      type: o.plan.type,
+                      amount: o.amount,
+                      currency: o.plan.currency,
+                      accountId: o.plan.accountId,
+                      categoryId: o.plan.categoryId,
+                      description:
+                        o.plan.title +
+                        (o.plan.kind === "installment"
+                          ? ` · ${o.index + 1}/${o.plan.count}`
+                          : ""),
+                      date: today(),
+                      planId: o.plan.id,
+                      planIndex: o.index,
+                    },
+                  })
+                }
+              />
             ) : null}
             {page === "overview" ? (
               <>
@@ -955,8 +1061,8 @@ export default function BudgetApp() {
                       CSV dışa aktar
                     </Button>
                     <Txt style={{ fontSize: 10, color: C.dim, marginTop: 13 }}>
-                      CSV yalnızca işlemleri taşır; aylık limitleri ve tasarruf
-                      hedeflerini içermez.
+                      CSV yalnızca işlemleri taşır; hesapları, transferleri,
+                      planları, aylık limitleri ve tasarruf hedeflerini içermez.
                     </Txt>
                   </Card>
                 </View>
@@ -1065,6 +1171,8 @@ export default function BudgetApp() {
               <Pressable
                 key={item.id}
                 accessibilityRole="button"
+                accessibilityLabel={item.short}
+                accessibilityState={{ selected: page === item.id }}
                 onPress={() => navigate(item.id)}
                 style={{
                   flex: 1,
@@ -1131,9 +1239,29 @@ export default function BudgetApp() {
           </Pressable>
         </View>
       ) : null}
+      {dialog?.kind === "account" ? (
+        <AccountEditor
+          account={dialog.account}
+          onClose={close}
+          onDone={notify}
+        />
+      ) : null}
+      {dialog?.kind === "transfer" ? (
+        <TransferEditor
+          transfer={dialog.transfer}
+          toId={dialog.toId}
+          amount={dialog.amount}
+          onClose={close}
+          onDone={notify}
+        />
+      ) : null}
+      {dialog?.kind === "plan" ? (
+        <PlanEditor onClose={close} onDone={notify} />
+      ) : null}
       {dialog?.kind === "transaction" ? (
         <TransactionEditor
           transaction={dialog.transaction}
+          draft={dialog.draft}
           onClose={close}
           onDone={notify}
           onDelete={(t) => setDialog({ kind: "delete", transaction: t })}

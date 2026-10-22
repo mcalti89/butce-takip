@@ -317,6 +317,31 @@ export function createBudgetApp(options: Options = {}) {
           return res
             .status(400)
             .json({ error: "Bütçe verisi doğrulanamadı. Kayıt yapılmadı." });
+        const financeKeys = [
+          "financialAccounts",
+          "accountTransfers",
+          "paymentPlans",
+        ] as const;
+        if (
+          revision > 0 &&
+          financeKeys.some((key) => data[key] === undefined)
+        ) {
+          const previous = await db.read(account.id);
+          if (
+            financeKeys.some(
+              (key) =>
+                data[key] === undefined &&
+                (previous.data?.[key]?.length ?? 0) > 0,
+            )
+          )
+            return res
+              .status(409)
+              .json({
+                code: "APP_UPDATE_REQUIRED",
+                error:
+                  "Bu ekran eski sürümde kaldı. Hesap ve planların korunması için sayfayı yenileyip tekrar dene.",
+              });
+        }
         const next = await db.write(account.id, revision, data, Date.now());
         if (next === null)
           return res.status(409).json({

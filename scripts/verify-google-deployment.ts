@@ -151,7 +151,60 @@ export async function verifyGoogleDeployment() {
     );
     stage = "hesaplar arası veri ayrımı";
     const data = emptyData();
+    const financeDate = new Date().toISOString().slice(0, 10);
+    data.financialAccounts = [
+      {
+        id: "smoke-bank",
+        name: "Synthetic bank",
+        kind: "bank",
+        currency: "TRY",
+        openingBalance: 1000,
+        openingDate: financeDate,
+        archived: false,
+      },
+      {
+        id: "smoke-card",
+        name: "Synthetic card",
+        kind: "card",
+        currency: "TRY",
+        openingBalance: 0,
+        openingDate: financeDate,
+        archived: false,
+        creditLimit: 10000,
+        statementDay: 15,
+        paymentDay: 25,
+      },
+    ];
+    data.paymentPlans = [
+      {
+        id: "smoke-plan",
+        title: "Synthetic installments",
+        kind: "installment",
+        type: "expense",
+        amount: 58.5,
+        currency: "TRY",
+        categoryId: "market",
+        accountId: "smoke-card",
+        startDate: financeDate,
+        count: 3,
+        archived: false,
+      },
+    ];
+    data.accountTransfers = [
+      {
+        id: "smoke-transfer",
+        fromId: "smoke-bank",
+        toId: "smoke-card",
+        amount: 19.5,
+        currency: "TRY",
+        date: financeDate,
+        note: "Synthetic payment",
+      },
+    ];
     data.transactions.push({
+      accountId: "smoke-card",
+      planId: "smoke-plan",
+      planIndex: 0,
       id: randomUUID(),
       type: "expense",
       categoryId: "market",
@@ -167,6 +220,15 @@ export async function verifyGoogleDeployment() {
           a.cookie,
         )
       ).status === 200,
+    );
+    check(
+      isDeepStrictEqual(
+        (await (await request("data", undefined, a.cookie)).json()).data,
+        data,
+      ),
+    );
+    console.log(
+      "Hesap, transfer ve taksit SQL kontrolü başarılı; iki kullanıcının finansal verileri ayrı.",
     );
     const other = await (await request("data", undefined, b.cookie)).json();
     check(other.revision === 1 && isDeepStrictEqual(other.data, emptyData()));

@@ -4,6 +4,9 @@ export function isPristineBudget(data: BudgetData) {
   const defaults = emptyData();
   return (
     !data.demo &&
+    (data.financialAccounts?.length ?? 0) === 0 &&
+    (data.accountTransfers?.length ?? 0) === 0 &&
+    (data.paymentPlans?.length ?? 0) === 0 &&
     data.transactions.length === 0 &&
     Object.keys(data.budgets).length === 0 &&
     Object.keys(data.savingsGoals ?? {}).length === 0 &&

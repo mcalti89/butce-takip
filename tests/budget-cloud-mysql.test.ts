@@ -524,6 +524,127 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
         ),
       ).rejects.toBeInstanceOf(GoogleAccountConflict);
     });
+    it("hesap, transfer ve taksit belgesi SQL'de kayıpsız ve kullanıcıya özel saklanır; eski istemci silemez", async () => {
+      const user = await login(
+        "finance-" + randomUUID(),
+        `finance-${randomUUID()}@gmail.com`,
+      );
+      const other = await login(
+        "finance-other-" + randomUUID(),
+        `finance-${randomUUID()}@gmail.com`,
+      );
+      const initial = await (await call("data", undefined, user.cookie)).json();
+      const doc = emptyData();
+      doc.financialAccounts = [
+        {
+          id: "bank",
+          name: "Test banka",
+          kind: "bank",
+          currency: "TRY",
+          openingBalance: 1000,
+          openingDate: "2026-01-01",
+          archived: false,
+        },
+        {
+          id: "card",
+          name: "Test kart",
+          kind: "card",
+          currency: "TRY",
+          openingBalance: 0,
+          openingDate: "2026-01-01",
+          archived: false,
+          creditLimit: 10000,
+          statementDay: 15,
+          paymentDay: 25,
+        },
+      ];
+      doc.paymentPlans = [
+        {
+          id: "plan",
+          title: "Taksit",
+          kind: "installment",
+          type: "expense",
+          amount: 300,
+          currency: "TRY",
+          categoryId: "market",
+          accountId: "card",
+          startDate: "2026-01-20",
+          count: 3,
+          archived: false,
+        },
+      ];
+      doc.transactions = [
+        {
+          id: "paid",
+          type: "expense",
+          amount: 100,
+          currency: "TRY",
+          baseAmount: 100,
+          date: "2026-01-20",
+          description: "Taksit 1",
+          categoryId: "market",
+          accountId: "card",
+          planId: "plan",
+          planIndex: 0,
+        },
+      ];
+      doc.accountTransfers = [
+        {
+          id: "payment",
+          fromId: "bank",
+          toId: "card",
+          amount: 100,
+          currency: "TRY",
+          date: "2026-01-21",
+          note: "Kart ödemesi",
+        },
+      ];
+      const saved = await call(
+        "data",
+        { accountId: user.accountId, revision: initial.revision, data: doc },
+        user.cookie,
+      );
+      expect(saved.status).toBe(200);
+      const current = await (await call("data", undefined, user.cookie)).json();
+      expect(current.data).toEqual(doc);
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
+      expect(
+        (await (await call("data", undefined, other.cookie)).json()).data
+          .financialAccounts,
+      ).toEqual([]);
+      const old = emptyData();
+      delete old.financialAccounts;
+      delete old.accountTransfers;
+      delete old.paymentPlans;
+      const stale = await call(
+        "data",
+        { accountId: user.accountId, revision: current.revision, data: old },
+        user.cookie,
+      );
+      expect(stale.status).toBe(409);
+      expect((await stale.json()).code).toBe("APP_UPDATE_REQUIRED");
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
+      const duplicate = {
+        ...doc,
+        transactions: [
+          ...doc.transactions,
+          { ...doc.transactions[0], id: "duplicate" },
+        ],
+      };
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: current.revision,
+              data: duplicate,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(400);
+    });
     it("çıkış yalnızca ilgili oturumu kapatır", async () => {
       expect((await call("logout", {}, bob.cookie)).status).toBe(200);
       expect((await call("data", undefined, bob.cookie)).status).toBe(401);

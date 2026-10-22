@@ -1,3 +1,9 @@
+import {
+  validFinanceData,
+  type FinancialAccount,
+  type AccountTransfer,
+  type PaymentPlan,
+} from "./finance";
 export type TransactionType = "income" | "expense";
 export type Category = {
   id: string;
@@ -13,6 +19,9 @@ export type Transaction = {
   amount: number;
   date: string;
   description: string;
+  accountId?: string;
+  planId?: string;
+  planIndex?: number;
   currency?: string;
   baseAmount?: number;
   fxRate?: number;
@@ -34,6 +43,9 @@ export type FxRateSnapshot = {
 };
 export type BudgetData = {
   version: 1;
+  financialAccounts?: FinancialAccount[];
+  accountTransfers?: AccountTransfer[];
+  paymentPlans?: PaymentPlan[];
   categories: Category[];
   transactions: Transaction[];
   budgets: Record<string, Record<string, number>>;
@@ -182,6 +194,9 @@ export function parseAmount(input: string): number {
 export function emptyData(): BudgetData {
   return {
     version: 1,
+    financialAccounts: [],
+    accountTransfers: [],
+    paymentPlans: [],
     categories: [...DEFAULT_CATEGORIES],
     transactions: [],
     budgets: {},
@@ -485,17 +500,20 @@ export function validateData(value: unknown): value is BudgetData {
     )
       return false;
   }
-  return Object.entries(v.budgets).every(
-    ([m, budgets]) =>
-      /^\d{4}-(0[1-9]|1[0-2])$/.test(m) &&
-      budgets &&
-      typeof budgets === "object" &&
-      Object.entries(budgets).every(
-        ([cid, n]) =>
-          v.categories.some((c) => c.id === cid && c.type === "expense") &&
-          typeof n === "number" &&
-          Number.isFinite(n) &&
-          n >= 0,
-      ),
+  return (
+    validFinanceData(v) &&
+    Object.entries(v.budgets).every(
+      ([m, budgets]) =>
+        /^\d{4}-(0[1-9]|1[0-2])$/.test(m) &&
+        budgets &&
+        typeof budgets === "object" &&
+        Object.entries(budgets).every(
+          ([cid, n]) =>
+            v.categories.some((c) => c.id === cid && c.type === "expense") &&
+            typeof n === "number" &&
+            Number.isFinite(n) &&
+            n >= 0,
+        ),
+    )
   );
 }
