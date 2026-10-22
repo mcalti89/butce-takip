@@ -65,9 +65,11 @@ import {
   TransferEditor,
 } from "@/components/budget/finance";
 import type { FinancialAccount, AccountTransfer } from "@/lib/budget/finance";
+import { AnalysisDashboard, BudgetWarnings } from "@/components/budget/reports";
 
 type Page =
   | "overview"
+  | "analysis"
   | "transactions"
   | "budgets"
   | "fx"
@@ -107,6 +109,12 @@ const NAV: { id: Page; title: string; short: string; icon: string }[] = [
     icon: "credit-card",
   },
   { id: "calendar", title: "Ödeme takvimi", short: "Takvim", icon: "calendar" },
+  {
+    id: "analysis",
+    title: "Tahmin & raporlar",
+    short: "Analiz",
+    icon: "bar-chart-2",
+  },
   { id: "fx", title: "Döviz", short: "Döviz", icon: "dollar-sign" },
 ];
 function Brand({ small = false }: { small?: boolean }) {
@@ -156,9 +164,16 @@ export default function BudgetApp() {
   const desktop = width >= 1080;
   const stackedHeader = mobile || width - (desktop ? 278 : 60) < 780;
   const [page, setPage] = useState<Page>("overview");
-  const hasMonth = ["overview", "transactions", "budgets", "calendar"].includes(
-    page,
+  const [analysisStart, setAnalysisStart] = useState<"forecast" | "reports">(
+    "forecast",
   );
+  const hasMonth = [
+    "overview",
+    "transactions",
+    "budgets",
+    "calendar",
+    "analysis",
+  ].includes(page);
   const [accountOpen, setAccountOpen] = useState(false);
   const [month, setMonth] = useState(monthKey());
   const [dialog, setDialog] = useState<Dialog>(null);
@@ -354,7 +369,7 @@ export default function BudgetApp() {
             ))}
           </View>
           <View style={{ marginTop: "auto" }}>
-            {height >= 900 ? (
+            {height >= 1000 ? (
               <Card
                 style={{
                   backgroundColor: "#15231F",
@@ -498,36 +513,40 @@ export default function BudgetApp() {
                 >
                   {page === "overview"
                     ? "Paranın kontrolü sende."
-                    : page === "transactions"
-                      ? "Her işlem, bir hikâye."
-                      : page === "budgets"
-                        ? "Planın ne kadar kaldı?"
-                        : page === "fx"
-                          ? "Döviz de, net gör."
-                          : page === "accounts"
-                            ? "Hesapların ve kartların."
-                            : page === "calendar"
-                              ? "Ödemelerini planla."
-                              : page === "settings"
-                                ? "Ayarlar"
-                                : "Bütçen. Senin düzenin."}
+                    : page === "analysis"
+                      ? "Bugünü anla, yarını planla."
+                      : page === "transactions"
+                        ? "Her işlem, bir hikâye."
+                        : page === "budgets"
+                          ? "Planın ne kadar kaldı?"
+                          : page === "fx"
+                            ? "Döviz de, net gör."
+                            : page === "accounts"
+                              ? "Hesapların ve kartların."
+                              : page === "calendar"
+                                ? "Ödemelerini planla."
+                                : page === "settings"
+                                  ? "Ayarlar"
+                                  : "Bütçen. Senin düzenin."}
                 </Txt>
                 <Txt style={{ color: C.muted, fontSize: 12, marginTop: 3 }}>
                   {page === "overview"
                     ? "Büyük resmi gör, küçük adımlarla ilerle."
-                    : page === "transactions"
-                      ? "Gelir ve giderlerini tek yerde takip et."
-                      : page === "budgets"
-                        ? "Kategori limitlerini aya özel belirle."
-                        : page === "fx"
-                          ? "TCMB alış ve satış kurlarını tarihleriyle izle."
-                          : page === "accounts"
-                            ? "Bakiyelerini ve transferlerini tek yerde gör."
-                            : page === "calendar"
-                              ? "Yaklaşan gelir, ödeme ve taksitlerini takip et."
-                              : page === "settings"
-                                ? "Uygulama kurulumu ve cihazında kullanım."
-                                : "Kategorilerini yönet, verilerini yanında taşı."}
+                    : page === "analysis"
+                      ? "Gelecek ay tahmini bugüne, raporlar seçili aya göre hesaplanır."
+                      : page === "transactions"
+                        ? "Gelir ve giderlerini tek yerde takip et."
+                        : page === "budgets"
+                          ? "Kategori limitlerini aya özel belirle."
+                          : page === "fx"
+                            ? "TCMB alış ve satış kurlarını tarihleriyle izle."
+                            : page === "accounts"
+                              ? "Bakiyelerini ve transferlerini tek yerde gör."
+                              : page === "calendar"
+                                ? "Yaklaşan gelir, ödeme ve taksitlerini takip et."
+                                : page === "settings"
+                                  ? "Uygulama kurulumu ve cihazında kullanım."
+                                  : "Kategorilerini yönet, verilerini yanında taşı."}
                 </Txt>
               </View>
               {page === "accounts" ? (
@@ -685,9 +704,71 @@ export default function BudgetApp() {
                 }
               />
             ) : null}
+            {page === "analysis" ? (
+              <AnalysisDashboard
+                initialTab={analysisStart}
+                data={data}
+                month={month}
+                mobile={mobile}
+                onAccounts={() => navigate("accounts")}
+                onCalendar={() => navigate("calendar")}
+                onBudget={(categoryId) => {
+                  const category = data.categories.find(
+                    (c) => c.id === categoryId,
+                  );
+                  if (category) setDialog({ kind: "budget", category });
+                }}
+              />
+            ) : null}
             {page === "overview" ? (
               <>
                 <Metrics data={data} month={month} mobile={mobile} />
+                <Card style={{ padding: 17 }}>
+                  <View
+                    style={{
+                      flexDirection: mobile ? "column" : "row",
+                      alignItems: mobile ? "stretch" : "center",
+                      gap: 12,
+                    }}
+                  >
+                    <View style={{ flex: 1 }}>
+                      <Txt bold>Gelecek ay seni ne bekliyor?</Txt>
+                      <Txt
+                        style={{ color: C.muted, fontSize: 12, marginTop: 4 }}
+                      >
+                        Hesap bakiyelerin ve ödeme planlarınla ay sonu
+                        tahminini, karşılaştırmalarını ve kategori eğilimlerini
+                        gör.
+                      </Txt>
+                    </View>
+                    <Button
+                      small
+                      kind="secondary"
+                      icon="trending-up"
+                      onPress={() => {
+                        setAnalysisStart("forecast");
+                        navigate("analysis");
+                      }}
+                    >
+                      Tahmin ve raporları aç
+                    </Button>
+                  </View>
+                </Card>
+                <BudgetWarnings
+                  data={data}
+                  month={month}
+                  compact
+                  onReports={() => {
+                    setAnalysisStart("reports");
+                    navigate("analysis");
+                  }}
+                  onBudget={(categoryId) => {
+                    const category = data.categories.find(
+                      (c) => c.id === categoryId,
+                    );
+                    if (category) setDialog({ kind: "budget", category });
+                  }}
+                />
                 <SavingsCard
                   data={data}
                   month={month}
