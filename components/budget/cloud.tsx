@@ -8,9 +8,11 @@ import { Button, C, Card, ErrorText, IconButton, Sheet, Txt } from "./ui";
 export function AccountPopup({
   desktop,
   onClose,
+  onNavigate,
 }: {
   desktop: boolean;
   onClose: () => void;
+  onNavigate: (page: "settings" | "data") => void;
 }) {
   const insets = useSafeAreaInsets();
   useEffect(() => {
@@ -31,7 +33,11 @@ export function AccountPopup({
           accessibilityRole="button"
           accessibilityLabel="Hesap menüsünü kapat"
           onPress={onClose}
-          style={{ position: "absolute", inset: 0, backgroundColor: "#02060B66" }}
+          style={{
+            position: "absolute",
+            inset: 0,
+            backgroundColor: "#02060B66",
+          }}
         />
         <View
           accessibilityViewIsModal
@@ -44,7 +50,31 @@ export function AccountPopup({
               : { right: 18, top: Math.max(insets.top, 18) + 52 }),
           }}
         >
-          <CloudPanel compact />
+          <CloudPanel compact>
+            <View
+              style={{
+                borderTopWidth: 1,
+                borderTopColor: C.border,
+                paddingTop: 12,
+                gap: 6,
+              }}
+            >
+              <Button
+                kind="ghost"
+                icon="settings"
+                onPress={() => onNavigate("settings")}
+              >
+                Ayarlar
+              </Button>
+              <Button
+                kind="ghost"
+                icon="sliders"
+                onPress={() => onNavigate("data")}
+              >
+                Veriler & kategoriler
+              </Button>
+            </View>
+          </CloudPanel>
           <View style={{ position: "absolute", right: 8, top: 8 }}>
             <IconButton name="x" label="Kapat" onPress={onClose} />
           </View>
@@ -54,7 +84,13 @@ export function AccountPopup({
   );
 }
 
-export function CloudPanel({ compact = false }: { compact?: boolean }) {
+export function CloudPanel({
+  compact = false,
+  children,
+}: {
+  compact?: boolean;
+  children?: React.ReactNode;
+}) {
   const {
     data,
     cloud,
@@ -140,6 +176,7 @@ export function CloudPanel({ compact = false }: { compact?: boolean }) {
           </>
         )}
         <ErrorText message={error} />
+        {children}
       </View>
       {confirm && (
         <Sheet

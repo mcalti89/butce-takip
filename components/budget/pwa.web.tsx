@@ -5,7 +5,13 @@ type InstallEvent = Event & {
   prompt: () => Promise<void>;
   userChoice: Promise<{ outcome: "accepted" | "dismissed" }>;
 };
-export default function PwaPanel({ compact = false }: { compact?: boolean }) {
+export default function PwaPanel({
+  compact = false,
+  visible = true,
+}: {
+  compact?: boolean;
+  visible?: boolean;
+}) {
   const [install, setInstall] = useState<InstallEvent | null>(null);
   const [installed, setInstalled] = useState(false);
   const [online, setOnline] = useState(true);
@@ -107,6 +113,9 @@ export default function PwaPanel({ compact = false }: { compact?: boolean }) {
     );
     waiting.postMessage({ type: "SKIP_WAITING" });
   };
+  // Keep install-prompt and service-worker listeners alive while the settings
+  // page is hidden, so browser events received on the overview are retained.
+  if (!visible) return null;
   return (
     <>
       <Card

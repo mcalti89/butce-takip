@@ -57,7 +57,13 @@ import PwaPanel from "@/components/budget/pwa";
 import { SavingsCard, SavingsEditor } from "@/components/budget/savings";
 import { FxDashboard } from "@/components/budget/fx";
 
-type Page = "overview" | "transactions" | "budgets" | "fx" | "data";
+type Page =
+  | "overview"
+  | "transactions"
+  | "budgets"
+  | "fx"
+  | "data"
+  | "settings";
 type Dialog =
   | { kind: "transaction"; transaction?: Transaction }
   | { kind: "budget"; category: Category }
@@ -72,12 +78,6 @@ const NAV: { id: Page; title: string; short: string; icon: string }[] = [
   { id: "transactions", title: "İşlemler", short: "İşlemler", icon: "repeat" },
   { id: "budgets", title: "Bütçeler", short: "Bütçeler", icon: "target" },
   { id: "fx", title: "Döviz", short: "Döviz", icon: "dollar-sign" },
-  {
-    id: "data",
-    title: "Veriler & kategoriler",
-    short: "Veriler",
-    icon: "sliders",
-  },
 ];
 function Brand({ small = false }: { small?: boolean }) {
   return (
@@ -119,8 +119,7 @@ function Brand({ small = false }: { small?: boolean }) {
 }
 
 export default function BudgetApp() {
-  const { data, loading, storageError, update, startFresh } =
-    useBudget();
+  const { data, loading, storageError, update, startFresh } = useBudget();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mobile = width < 720;
@@ -152,6 +151,7 @@ export default function BudgetApp() {
     [],
   );
   const navigate = (next: Page) => {
+    setAccountOpen(false);
     setPage(next);
     scroll.current?.scrollTo({ y: 0, animated: false });
   };
@@ -431,9 +431,12 @@ export default function BudgetApp() {
                   }}
                 >
                   BÜTÇE TAKİP /{" "}
-                  {NAV.find((n) => n.id === page)?.title.toLocaleUpperCase(
-                    "tr-TR",
-                  )}
+                  {(page === "settings"
+                    ? "Ayarlar"
+                    : page === "data"
+                      ? "Veriler & kategoriler"
+                      : NAV.find((n) => n.id === page)?.title
+                  )?.toLocaleUpperCase("tr-TR")}
                 </Txt>
                 <Txt
                   bold
@@ -451,7 +454,9 @@ export default function BudgetApp() {
                         ? "Planın ne kadar kaldı?"
                         : page === "fx"
                           ? "Döviz de, net gör."
-                          : "Bütçen. Senin düzenin."}
+                          : page === "settings"
+                            ? "Ayarlar"
+                            : "Bütçen. Senin düzenin."}
                 </Txt>
                 <Txt style={{ color: C.muted, fontSize: 12, marginTop: 3 }}>
                   {page === "overview"
@@ -462,10 +467,12 @@ export default function BudgetApp() {
                         ? "Kategori limitlerini aya özel belirle."
                         : page === "fx"
                           ? "TCMB alış ve satış kurlarını tarihleriyle izle."
-                          : "Kategorilerini yönet, verilerini yanında taşı."}
+                          : page === "settings"
+                            ? "Uygulama kurulumu ve cihazında kullanım."
+                            : "Kategorilerini yönet, verilerini yanında taşı."}
                 </Txt>
               </View>
-              {page !== "data" && page !== "fx" ? (
+              {page === "settings" ? null : page !== "data" && page !== "fx" ? (
                 <Button
                   icon="plus"
                   onPress={() => setDialog({ kind: "transaction" })}
@@ -524,11 +531,10 @@ export default function BudgetApp() {
                 <ErrorText message={storageError} />
               </Card>
             ) : null}
-            {Platform.OS === "web" &&
-            (page === "overview" || page === "data") ? (
-              <PwaPanel compact={page === "overview"} />
+            {Platform.OS === "web" ? (
+              <PwaPanel visible={page === "settings"} />
             ) : null}
-            {page !== "data" && page !== "fx" ? (
+            {page !== "data" && page !== "fx" && page !== "settings" ? (
               <View style={styles.between}>
                 <View
                   style={{
@@ -1091,7 +1097,11 @@ export default function BudgetApp() {
         ) : null}
       </View>
       {accountOpen ? (
-        <AccountPopup desktop={desktop} onClose={() => setAccountOpen(false)} />
+        <AccountPopup
+          desktop={desktop}
+          onClose={() => setAccountOpen(false)}
+          onNavigate={navigate}
+        />
       ) : null}
       {toast ? (
         <View
