@@ -17,7 +17,8 @@
     "android": "expo start --android",
     "ios": "expo start --ios",
     "qr": "node scripts/generate_qr.mjs",
-    "build:pwa": "expo export --platform web --output-dir web-dist && node scripts/prepare-pwa.mjs web-dist"
+    "build:pwa": "expo export --platform web --output-dir web-dist && node scripts/prepare-pwa.mjs web-dist",
+    "db:budget": "tsx scripts/migrate-budget.ts"
   },
   "dependencies": {
     "@expo-google-fonts/ibm-plex-sans": "^0.4.1",

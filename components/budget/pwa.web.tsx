@@ -177,8 +177,8 @@ export default function PwaPanel({ compact = false }: { compact?: boolean }) {
         </View>
         {!compact ? (
           <Txt style={{ color: C.muted, fontSize: 11, marginTop: 12 }}>
-            Bağlantı durumu veri senkronizasyonu değildir. Hosting veritabanı
-            henüz bağlı değil; başka bir cihaz aynı kayıtları otomatik getirmez.
+            Bağlantı simgesi internet durumunu gösterir. SQL oturumunu ve kayıt
+            konumunu Veri yönetimi bölümünden kontrol edebilirsin.
           </Txt>
         ) : null}
         {error ? (
@@ -215,8 +215,8 @@ export default function PwaPanel({ compact = false }: { compact?: boolean }) {
             Yayın sürümünde ilk çevrim içi açılış ve kabuk hazırlığı
             tamamlandıktan sonra yerel kayıtlarını çevrim dışı görebilirsin.
             Finansal veriler service worker önbelleğine değil yerel veri alanına
-            yazılır. Gelecekte sunucu hesabı eklenirse çevrim dışı
-            senkronizasyon ayrıca tasarlanacak.
+            yazılır. SQL bütçesi için internet ve açık oturum gerekir; çevrim
+            dışı değişiklikler sunucuya gönderilmek üzere biriktirilmez.
           </Txt>
           <Txt
             style={{
@@ -226,9 +226,9 @@ export default function PwaPanel({ compact = false }: { compact?: boolean }) {
               marginBottom: 18,
             }}
           >
-            Şu an hosting veritabanı bağlantısı yok. Aynı tarayıcı ve aynı site
-            adresindeki yerel kayıtlar korunur; başka cihaza geçiş için CSV
-            gerekir.
+            Yerel modda kayıtlar bu cihazdadır. Başka cihazdan SQL bütçeni açmak
+            için aynı SQL hesabıyla giriş yap. Tam JSON yedeği tüm bütçeyi, CSV
+            ise yalnızca işlemleri içerir.
           </Txt>
           <Button onPress={() => setHelp(false)} icon="check">
             Anladım

@@ -35,7 +35,7 @@ export function TransactionEditor({
   onDone: (message: string) => void;
   onDelete: (transaction: Transaction) => void;
 }) {
-  const { data, update } = useBudget();
+  const { data, update, cloud } = useBudget();
   const [type, setType] = useState<TransactionType>(
     transaction?.type || "expense",
   );
@@ -199,8 +199,10 @@ export function TransactionEditor({
         currency === "TRY"
           ? transaction
             ? "İşlem güncellendi."
-            : "İşlem yerel olarak kaydedildi."
-          : `İşlem ${money(baseAmount)} TRY karşılığıyla yerel olarak kaydedildi.`,
+            : cloud.mode === "cloud"
+              ? "İşlem SQL sunucusuna kaydedildi."
+              : "İşlem yerel olarak kaydedildi."
+          : `İşlem ${money(baseAmount)} TRY karşılığıyla ${cloud.mode === "cloud" ? "SQL sunucusuna" : "yerel olarak"} kaydedildi.`,
       );
       onClose();
     } catch (e) {

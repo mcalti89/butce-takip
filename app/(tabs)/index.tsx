@@ -52,6 +52,7 @@ import {
   ImportEditor,
   TransactionEditor,
 } from "@/components/budget/editors";
+import { CloudPanel } from "@/components/budget/cloud";
 import PwaPanel from "@/components/budget/pwa";
 import { SavingsCard, SavingsEditor } from "@/components/budget/savings";
 import { FxDashboard } from "@/components/budget/fx";
@@ -118,7 +119,8 @@ function Brand({ small = false }: { small?: boolean }) {
 }
 
 export default function BudgetApp() {
-  const { data, loading, storageError, update, startFresh } = useBudget();
+  const { data, loading, storageError, update, startFresh, cloud } =
+    useBudget();
   const { width } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const mobile = width < 720;
@@ -322,8 +324,8 @@ export default function BudgetApp() {
                   marginTop: 4,
                 }}
               >
-                Finansal verilerin bu cihazda kalır. Hesap yok, sunucuya aktarım
-                yok.
+                Yerel bütçe veya hesabına özel SQL bütçesi. Veri yönetiminden
+                bağlantını kontrol et.
               </Txt>
             </Card>
             <View
@@ -385,7 +387,11 @@ export default function BudgetApp() {
                 >
                   <Icon name="shield" color={C.green} size={14} />
                   <Txt style={{ color: C.muted, fontSize: 10 }}>
-                    Yerel & özel
+                    {cloud.mode === "cloud"
+                      ? "SQL & özel"
+                      : cloud.mode === "locked"
+                        ? "SQL · giriş gerekli"
+                        : "Yerel & özel"}
                   </Txt>
                 </View>
               </View>
@@ -515,6 +521,9 @@ export default function BudgetApp() {
               <Card style={{ borderColor: C.red, padding: 14 }}>
                 <ErrorText message={storageError} />
               </Card>
+            ) : null}
+            {page !== "data" && cloud.mode !== "local" ? (
+              <CloudPanel compact />
             ) : null}
             {Platform.OS === "web" &&
             (page === "overview" || page === "data") ? (
@@ -851,26 +860,7 @@ export default function BudgetApp() {
             {page === "fx" ? <FxDashboard mobile={mobile} /> : null}
             {page === "data" ? (
               <>
-                <Card
-                  style={{ borderColor: "#4B4228", backgroundColor: "#242016" }}
-                >
-                  <View style={{ flexDirection: "row", gap: 14 }}>
-                    <Icon name="database" color={C.amber} size={24} />
-                    <View style={{ flex: 1 }}>
-                      <Txt bold style={styles.sectionTitle}>
-                        Hosting bağlantısı bekleniyor
-                      </Txt>
-                      <Txt
-                        style={{ color: C.muted, fontSize: 12, marginTop: 8 }}
-                      >
-                        Veritabanı türü ve hosting imkanları netleşince kimlik
-                        doğrulamalı HTTPS API üzerinden ortak veri kaynağına
-                        geçeceğiz. Şu an yalnızca yerel kayıt kullanılıyor;
-                        cihazlar arası senkronizasyon etkin değil.
-                      </Txt>
-                    </View>
-                  </View>
-                </Card>
+                <CloudPanel />
                 <Card
                   style={{ borderColor: "#254638", backgroundColor: "#13281F" }}
                 >
@@ -884,18 +874,17 @@ export default function BudgetApp() {
                     <Icon name="shield" color={C.green} size={25} />
                     <View style={{ flex: 1 }}>
                       <Txt bold style={styles.sectionTitle}>
-                        Verilerin bu cihazda, kontrol sende.
+                        Verilerin nerede saklanıyor?
                       </Txt>
                       <Txt
                         style={{ color: C.muted, marginTop: 7, fontSize: 12 }}
                       >
-                        Web’de kayıtlar, kategoriler, TRY bütçeleri ve tasarruf
-                        hedefleri tarayıcının localStorage alanında saklanır.
-                        Kur arşivi, cPanel bağlantısı kurulunca yalnızca
-                        TCMB’nin herkese açık oranlarını okur; kişisel işlem
-                        verilerini sunucuya yüklemez. Yerel Expo uygulamasında
-                        cihaz depolaması kullanılır. Tarayıcı verilerini silmek
-                        yerel kayıtlarını kaldırır; düzenli yedek al.
+                        {cloud.mode === "cloud"
+                          ? "SQL modunda bütçen, oturum açtığın hesaba bağlı sunucuda saklanır. Cihazda önceki yerel bütçen ayrı kalır. Sunucu kayıtları service worker önbelleğine yazılmaz; internet bağlantısı gerekir."
+                          : "Yerel bütçen bu tarayıcının veya cihazın depolamasındadır. SQL’e geçişi onaylamadan bu kayıtlar sunucuya aktarılmaz. Tarayıcı verilerini silmek yerel kayıtlarını kaldırır."}
+                        {
+                          " Düzenli olarak tam JSON yedeği indir; CSV yalnızca işlemleri içerir."
+                        }
                       </Txt>
                     </View>
                   </View>
@@ -1179,7 +1168,7 @@ export default function BudgetApp() {
         >
           <Txt style={{ color: C.muted, marginVertical: 18 }}>
             {dialog.kind === "delete"
-              ? `${dialog.transaction.description || "Seçili işlem"} · ${money(dialog.transaction.amount)} tutarındaki kayıt yerel verilerinden silinecek.`
+              ? `${dialog.transaction.description || "Seçili işlem"} · ${money(dialog.transaction.amount)} tutarındaki kayıt ${cloud.mode === "cloud" ? "SQL bütçenden" : "yerel verilerinden"} silinecek.`
               : `Bu moddaki ${data.transactions.length} işlem, özel kategoriler, bütçe limitleri ve tasarruf hedefleri kaldırılacak. Eklediğin kayıtlar varsa onlar da silinir; önce CSV dışa aktarabilirsin. CSV yalnızca işlemleri taşır.`}
           </Txt>
           <ErrorText message={confirmError} />
