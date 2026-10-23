@@ -1,3 +1,4 @@
+import { activityRows, type ActivityRow } from "./activity";
 import { transferReceivedAmount } from "./exchange";
 import { compareDatedRecordsNewestFirst } from "./time";
 import type { BudgetData } from "./model";
@@ -6,7 +7,13 @@ import { minorUnits, currencyScale } from "./currency";
 import { accountBalance, type FinancialAccount } from "./finance";
 import { monthEnd } from "./reports";
 
-/** Uses account currency, never the TRY reporting snapshot. Transfers remain separate. */
+export type AccountActivityRow = ActivityRow & {
+  amount: number;
+  direction: "in" | "out";
+  balanceAfter: number;
+};
+
+/** One ledger in account currency; transfers do not become income or expense. */
 export function accountMonthActivity(
   data: BudgetData,
   account: FinancialAccount,
@@ -55,9 +62,32 @@ export function accountMonthActivity(
     account.openingDate >= start && account.openingDate <= end
       ? account.openingBalance
       : 0;
+  // Calculate the complete ledger before any display filter is applied.
+  let balance = units(opening) + units(openingAdjustment);
+  const rows: AccountActivityRow[] = activityRows(transactions, transfers)
+    .reverse()
+    .map((entry) => {
+      const incoming =
+        entry.kind === "transfer"
+          ? entry.value.toId === account.id
+          : entry.value.type === "income";
+      const amount =
+        entry.kind === "transfer" && incoming
+          ? transferReceivedAmount(entry.value)
+          : entry.value.amount;
+      balance += (incoming ? 1 : -1) * units(amount);
+      return {
+        ...entry,
+        amount,
+        direction: incoming ? ("in" as const) : ("out" as const),
+        balanceAfter: balance / scale,
+      };
+    })
+    .reverse();
   return {
     start,
     end,
+    rows,
     transactions,
     transfers,
     income,

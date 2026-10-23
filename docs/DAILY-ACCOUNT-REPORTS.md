@@ -12,15 +12,18 @@ Hesaplar & kartlar ekranındaki her kartın Aylık hareketler düğmesi, varsay�
 olarak mevcut ayı açar. Önceki aylara gidilebilir; gelecekteki aya geçilmez.
 Görüntüleme salt okunurdur, işlem kaydetmez. Hesap arşivliyse geçmişi yine açılır.
 
-Hesap listesi yalnızca o hesabın accountId'siyle kayıtlı işlemleri içerir;
-hesapsız işlemleri veya başka hesapları geriye dönük atamaz. Gelir/Gider
-filtreleri yalnızca hareket listesini süzer, aylık özetin anlamını değiştirmez.
+Hesap listesi o hesabın accountId'siyle kayıtlı gelir/giderleri ve kaynak veya
+hedefi olduğu transferleri tek listede içerir; hesapsız işlemleri veya başka
+hesapları geriye dönük atamaz. Gelir/Gider/Transferler filtreleri yalnızca hareket
+listesini süzer, aylık özetin ve işlem sonu bakiyelerinin anlamını değiştirmez.
 Tutarlar hesabın özgün para birimindedir; OMR üç ondalıkla hesaplanır.
 
 Ay başı bakiyesi önceki günün kapanışıdır. Hesap ayın ortasında açıldıysa açılış
 bakiyesi ayrı ayarlama olarak gösterilir. Gelir − gider + gelen transfer −
 giden transfer + bu açılış farkı, ay başı ile gösterilen kapanış arasındaki
-farkı açıklar. Transfer/kart ödemeleri ayrıca listelenir ve gider sayılmaz.
+farkı açıklar. Transfer/kart ödemeleri aynı listede görünür ve gider sayılmaz.
+Her tutarın altında tüm hareketlere göre hesaplanan işlem sonu bakiyesi bulunur.
+Hesaplama ve sıralama ayrıntıları için [ACCOUNT-LEDGER.md](ACCOUNT-LEDGER.md).
 Kartta negatif net bakiye borçtur; banka ekstresi gibi yorumlanmaz.
 
 Günlük ve hesap tablosu mevcut kullanıcıya özel belgeden hesaplanır. Yeni SQL

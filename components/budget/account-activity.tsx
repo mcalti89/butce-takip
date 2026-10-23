@@ -1,4 +1,3 @@
-import { transferReceivedAmount } from "@/lib/budget/exchange";
 import React, { useState } from "react";
 import { View } from "react-native";
 import {
@@ -23,10 +22,23 @@ export function AccountActivitySheet({
   onClose: () => void;
 }) {
   const [month, setMonth] = useState(monthKey());
-  const [filter, setFilter] = useState<"all" | "income" | "expense">("all");
+  const [filter, setFilter] = useState<
+    "all" | "income" | "expense" | "transfer"
+  >("all");
   const activity = accountMonthActivity(data, account, month, today());
-  const rows = activity.transactions.filter(
-    (t) => filter === "all" || t.type === filter,
+  const rows = activity.rows.filter(
+    (row) =>
+      filter === "all" ||
+      (row.kind === "transfer"
+        ? filter === "transfer"
+        : row.value.type === filter),
+  );
+  const ambiguousTimes = activity.rows.some(
+    (row, index, all) =>
+      !row.value.time ||
+      (index > 0 &&
+        row.value.date === all[index - 1].value.date &&
+        row.value.time === all[index - 1].value.time),
   );
   const format = (amount: number) => moneyIn(amount, account.currency);
   return (
@@ -121,7 +133,7 @@ export function AccountActivitySheet({
         </Txt>
       </View>
       <Txt bold style={{ fontSize: 16, marginBottom: 12 }}>
-        Gelirler ve giderler · {activity.transactions.length}
+        Gelir, gider ve transferler · {rows.length}
       </Txt>
       <View
         style={{
@@ -136,6 +148,7 @@ export function AccountActivitySheet({
             { value: "all", label: "Tümü" },
             { value: "income", label: "Gelir" },
             { value: "expense", label: "Gider" },
+            { value: "transfer", label: "Transferler" },
           ] as const
         ).map((item) => (
           <Button
@@ -148,72 +161,38 @@ export function AccountActivitySheet({
           </Button>
         ))}
       </View>
+      <Txt style={{ color: C.dim, fontSize: 11, marginBottom: 12 }}>
+        En yeni hareket üsttedir. İşlem sonu bakiyesi tüm hareketleri içerir;
+        filtre seçimi bakiyeyi değiştirmez. Transferler gelir/gider toplamına
+        dahil değildir.
+        {ambiguousTimes
+          ? " Saatsiz kayıtlar günün başında sıralanır; aynı saatli kayıtların sırası sabittir."
+          : ""}
+      </Txt>
       {rows.length ? (
-        rows.map((t) => (
-          <View
-            key={t.id}
-            style={{
-              gap: 4,
-              paddingVertical: 12,
-              borderBottomWidth: 1,
-              borderColor: C.border,
-            }}
-          >
-            <View
-              style={{
-                flexDirection: "row",
-                flexWrap: "wrap",
-                justifyContent: "space-between",
-                gap: 8,
-              }}
-            >
-              <Txt bold style={{ flexShrink: 1 }}>
-                {t.description ||
-                  data.categories.find((c) => c.id === t.categoryId)?.name ||
-                  "İşlem"}
-              </Txt>
-              <Txt
-                bold
-                style={{ color: t.type === "income" ? C.green : C.red }}
-              >
-                {t.type === "income" ? "+" : "−"}
-                {format(t.amount)}
-              </Txt>
-            </View>
-            <Txt style={{ color: C.muted, fontSize: 12 }}>
-              {t.date} · {t.time ?? "Saat belirtilmedi"} ·{" "}
-              {t.type === "income" ? "Gelir" : "Gider"} ·{" "}
-              {data.categories.find((c) => c.id === t.categoryId)?.name}
-            </Txt>
-          </View>
-        ))
-      ) : (
-        <Empty
-          title={
-            filter === "all"
-              ? "Bu ay hesapta gelir/gider yok"
-              : filter === "income"
-                ? "Bu ay hesapta gelir yok"
-                : "Bu ay hesapta gider yok"
-          }
-          body="Hesapsız kayıtlar, diğer hesaplar ve henüz işlenmemiş planlar bu listeye alınmaz."
-        />
-      )}
-      <Txt bold style={{ fontSize: 16, marginTop: 22, marginBottom: 6 }}>
-        Transferler · {activity.transfers.length}
-      </Txt>
-      <Txt style={{ color: C.dim, fontSize: 11 }}>
-        Transferler ve kart ödemeleri yukarıdaki gelir/gider toplamına dahil
-        değildir.
-      </Txt>
-      {activity.transfers.length ? (
-        activity.transfers.map((t) => {
-          const incoming = t.toId === account.id,
-            otherId = incoming ? t.fromId : t.toId;
-          const other = data.financialAccounts?.find((a) => a.id === otherId);
+        rows.map((row) => {
+          const t = row.value;
+          const incoming = row.direction === "in";
+          const transfer = row.kind === "transfer" ? row.value : undefined;
+          const transaction =
+            row.kind === "transaction" ? row.value : undefined;
+          const other = transfer
+            ? data.financialAccounts?.find(
+                (a) => a.id === (incoming ? transfer.fromId : transfer.toId),
+              )
+            : undefined;
+          const category = transaction
+            ? data.categories.find((c) => c.id === transaction.categoryId)
+            : undefined;
+          const typeLabel = transfer
+            ? `${transfer.exchange ? "Döviz al / sat · " : ""}${incoming ? "Gelen transfer" : "Giden transfer"}`
+            : incoming
+              ? "Gelir"
+              : "Gider";
           return (
             <View
-              key={t.id}
+              key={`${row.kind}:${t.id}`}
+              testID={`account-activity-${row.kind}-${t.id}`}
               style={{
                 gap: 4,
                 paddingVertical: 12,
@@ -221,24 +200,73 @@ export function AccountActivitySheet({
                 borderColor: C.border,
               }}
             >
-              <Txt bold>
-                {t.exchange ? "Döviz al / sat · " : ""}
-                {incoming ? "Gelen transfer" : "Giden transfer"} ·{" "}
-                {incoming ? "+" : "−"}
-                {format(incoming ? transferReceivedAmount(t) : t.amount)}
-              </Txt>
-              <Txt style={{ color: C.muted, fontSize: 12 }}>
-                {t.date}
-                {t.time ? ` ${t.time}` : ""} · {other?.name ?? "Diğer hesap"}
-                {t.note ? ` · ${t.note}` : ""}
-              </Txt>
+              <View
+                style={{
+                  flexDirection: "row",
+                  flexWrap: "wrap",
+                  justifyContent: "space-between",
+                  gap: 8,
+                }}
+              >
+                <View style={{ flex: 1, minWidth: 100, gap: 4 }}>
+                  <Txt bold>
+                    {transaction
+                      ? transaction.description || category?.name || "İşlem"
+                      : transfer?.note || typeLabel}
+                  </Txt>
+                  <Txt style={{ color: C.muted, fontSize: 12 }}>
+                    {t.date} · {t.time ?? "Saat belirtilmedi"} · {typeLabel}
+                  </Txt>
+                  <Txt style={{ color: C.dim, fontSize: 11 }}>
+                    {transfer
+                      ? `${incoming ? "Gönderen" : "Alıcı"}: ${other?.name ?? "Diğer hesap"}`
+                      : category?.name}
+                  </Txt>
+                </View>
+                <View style={{ alignItems: "flex-end", flexShrink: 1, gap: 4 }}>
+                  <Txt
+                    bold
+                    style={{
+                      color: transfer ? C.blue : incoming ? C.green : C.red,
+                      textAlign: "right",
+                    }}
+                  >
+                    {incoming ? "+" : "−"}
+                    {format(row.amount)}
+                  </Txt>
+                  <Txt
+                    style={{ color: C.muted, fontSize: 11, textAlign: "right" }}
+                  >
+                    İşlem sonu bakiyesi
+                  </Txt>
+                  <Txt
+                    bold
+                    style={{
+                      color: row.balanceAfter < 0 ? C.red : C.text,
+                      fontSize: 12,
+                      textAlign: "right",
+                    }}
+                  >
+                    {format(row.balanceAfter)}
+                  </Txt>
+                </View>
+              </View>
             </View>
           );
         })
       ) : (
-        <Txt style={{ color: C.muted, fontSize: 12, marginTop: 12 }}>
-          Bu ay bu hesapta transfer yok.
-        </Txt>
+        <Empty
+          title={
+            filter === "all"
+              ? "Bu ay hesapta hareket yok"
+              : filter === "income"
+                ? "Bu ay hesapta gelir yok"
+                : filter === "expense"
+                  ? "Bu ay hesapta gider yok"
+                  : "Bu ay hesapta transfer yok"
+          }
+          body="Hesapsız kayıtlar, diğer hesaplar ve henüz işlenmemiş planlar bu listeye alınmaz."
+        />
       )}
     </Sheet>
   );
