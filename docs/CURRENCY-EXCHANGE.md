@@ -1,40 +1,53 @@
-# Döviz al / sat
+# Döviz al / sat — manuel banka kuru
 
-Hesaplar & Kartlar → Döviz al / sat sekmesi farklı para birimlerindeki iki aktif
-nakit/banka hesabı arasında döviz dönüşümü kaydeder. Gerçek banka emri göndermez.
-Kaynak tutar, tarih, isteğe bağlı saat ve hedef hesap seçildikten sonra “Kuru getir
-ve hesapla” ile hedef tutar ve bülten tarihleri gösterilir. Kaydet iki hesabın
-bakiyesini tek SQL JSON güncellemesinde değiştirir; gelir/gider kaydı oluşturmaz.
+Hesaplar & Kartlar → Döviz al / sat, farklı para birimlerindeki iki aktif
+nakit/banka hesabı arasında dönüşüm kaydeder. Kaynak/hedef hesap, tutar, tarih,
+isteğe bağlı saat ve bankada uygulanan kur kullanıcı tarafından girilir.
+Editör kur servisine istek göndermez ve TCMB'den otomatik kur almaz. Hedef
+hesaba geçecek tutar anında hesaplanır. Kaydet iki bakiyeyi tek SQL JSON belge
+güncellemesinde değiştirir; gelir/gider kaydı veya gerçek banka emri oluşturmaz.
 
-USD → TRY, kaynak USD'nin TCMB forexBuying (döviz alış) kurunu kullanır.
-TRY → USD, hedef USD'nin forexSelling (döviz satış) kuruna böler. Dövizler arası
-çapraz dönüşümde kaynak alış / hedef satış kullanılır. Kurun `unit` alanı uygulanır;
-örneğin 100 JPY fiyatı bir JPY fiyatı olarak yorumlanmaz. Ara TL tutarı yuvarlanmaz;
-yalnızca hedef para biriminin tutarı yuvarlanır. OMR için üç, diğer mevcut para
-birimleri için iki ondalık korunur. OMR kaynağı TCMB USD / 0,3845 paritesi olarak
-açıkça gösterilir. Banka/büro kuru farklı olabilir; ilk sürüm TCMB referans kurunu
-kullanır, komisyon veya manuel kur içermez.
+## Kurun yönü
 
-Kur servisi her para biriminde işlem günü veya öncesindeki son arşivlenmiş bülteni
-getirir; sonraki günün kuru asla kullanılmaz. Hafta sonu, tatil veya henüz günlük
-bültenin yayımlanmadığı günlerde gerçek bülten tarihi önizlemede ve geçmişte görünür.
-Kur eksik, boş, sıfır veya gelecekteyse kayıt yapılmaz. Hesap/tarih/tutar değiştirilirse
-eski önizleme kaydedilemez; yeniden hesaplanır. Not ve saat düzeltmek mevcut kur
-snapshot'ını korur.
+- USD → TRY: “Kur (1 USD = ? TRY)” alanına örneğin 40,25 girilir; dolar tutarı
+  40,25 ile çarpılır.
+- TRY → USD: aynı “1 USD = ? TRY” biçimi kullanılır; TL tutarı 40,25'e bölünür.
+- Diğer döviz çiftleri: 1 kaynak para biriminin kaç hedef para birimi ettiği
+  girilir. Örneğin USD → OMR için “1 USD = ? OMR”.
 
-Yeni kayıt dizisi yerine mevcut `accountTransfers` içindeki tek kayda isteğe bağlı
-`exchange` eklenir: kaynak tutar/para birimi mevcut alanlarda; hedef tutar/para birimi,
-çapraz oran, her döviz ayağının alış/satış kuru, birimi, gerçek bülten tarihi ve OMR
-kaynak işareti snapshot içinde saklanır. Normal aynı para birimli transferlerin
-formatı değişmez; çapraz transfer exchange olmadan kabul edilmez. API kur-tutar
-uyumunu, hesap para birimlerini, tarihleri ve hassasiyeti doğrular. SQL şema migration'ı
-veya yeni ortam değişkeni gerekmez. Tam JSON yedeği bütün alanları taşır; CSV hâlâ
-yalnızca gelir/gider kayıtlarını taşır.
+Kur virgül veya nokta ile ve en fazla 8 ondalıkla yazılır; binlik ayırıcı,
+negatif, sıfır, sonsuz veya bilimsel gösterim kabul edilmez. 100 birimlik kur
+bülteni yerine her zaman 1 birim kuru girilir. Hesap değişirse kur alanı
+boşaltılır; başka para biriminin kuru yanlışlıkla kullanılamaz. Tutar değişirse
+aynı manuel kurla hedef tutar yeniden hesaplanır. Yalnızca hedef tutar kendi
+para birimine yuvarlanır: OMR üç, diğer mevcut para birimleri iki ondalık.
 
-`accountBalance` hedefe `exchange.toAmount`, kaynağa eski `amount` tutarını uygular.
-Hesap aylık hareketleri aynı yöntemi izler; her hesap kendi para birimiyle uzlaşır.
-İşlemler ve pano tek döviz hareketi gösterir; iki tutar görünür. Transfer filtresi
-ve araması döviz işlemlerini de kapsar. Hesaplardaki Transferler sekmesi aynı para
-birimli hareketleri, Döviz al / sat sekmesi dönüşümleri gösterir. İşlemler listesinden
-doğru editör açılır; düzenleme ve silme iki bakiyeyi birlikte yeniden hesaplar.
-Bütçeler, aylık/günlük gelir-gider ve kategori raporları bu dönüşümü harcama saymaz.
+## Saklama ve düzeltme
+
+`accountTransfers[].exchange` içinde `source: "MANUAL"`, kullanıcının girdiği
+`manualRate`, çarpma/bölme yönü `rateDirection`, hedef tutar/para birimi ve
+hesaplamada kullanılan normalize oran `rate` saklanır. Her işlem kendi kurunu
+saklar; aynı gün farklı bankalarda yapılan işlemler birbirini değiştirmez.
+Tarih, kaynak tutar, kaynak hesap ve saat mevcut transfer alanlarında kalır.
+API manuel kurun hassasiyetini, yönünü ve hedef tutarla uyumunu doğrular.
+
+Döviz geçmişinden veya İşlemler listesinden Döviz işlemini düzenle açılınca
+kaydedilmiş kur alanı dolu gelir. Kur veya tutar düzeltildiğinde aynı kayıt
+kimliği korunur; her iki hesabın bakiyesi ve aylık hareketlerdeki sonraki
+bakiyeler yeniden türetilir. Silme iki ayağı birlikte kaldırır. Kur düzeltmesi
+kaynak tutar değişmedikçe kaynak hesaptaki çıkışı değiştirmez.
+
+Eski `source: "TCMB"` kayıtları ve kur snapshot'ları geriye uyumlu biçimde
+okunur ve aynen korunur. Eski kaydı yalnızca açmak, notunu veya saatini değiştirmek
+kuru dönüştürmez. Kur alanı düzenlenirse (aynı sayı tekrar girilse bile) veya tutar,
+hesap/tarih değiştirilirse önizleme manuel kurla hesaplanır; kaydetten sonra yeni
+kayıt manuel kaynağı taşır ve eski TCMB snapshot'ı kaldırılır. Kullanıcı kaydetmeden
+hiçbir dönüşüm yapılmaz.
+
+SQL şeması/veri göçü veya yeni ortam değişkeni gerekmez. Tam JSON yedeği girilen
+kuru taşır; CSV yalnızca gelir/gider kayıtlarını taşımaya devam eder.
+`accountBalance` kaynakta `amount`, hedefte `exchange.toAmount` kullanır. İşlemler
+ve birleşik aylık hesap hareketleri tek döviz hareketini gösterir. Döviz geçmişi
+girilen kuru “Manuel kur” etiketiyle gösterir. Bütçe ve gelir/gider raporları bu
+dönüşümü harcama saymaz. Genel döviz ekranı ve gelir/giderin mevcut TRY kur
+snapshot'ları bu düzenlemeden bağımsızdır.

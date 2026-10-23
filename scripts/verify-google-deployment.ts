@@ -1,4 +1,4 @@
-import { buildExchange } from "../lib/budget/exchange";
+import { buildManualExchange } from "../lib/budget/exchange";
 import { randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { isDeepStrictEqual } from "node:util";
@@ -219,17 +219,7 @@ export async function verifyGoogleDeployment() {
       currency: "USD",
       date: financeDate,
       note: "Synthetic exchange",
-      exchange: buildExchange(10, "USD", "TRY", financeDate, {
-        currency: "USD",
-        currencyName: "Synthetic USD",
-        date: financeDate,
-        unit: 1,
-        forexBuying: 40,
-        forexSelling: 41,
-        banknoteBuying: null,
-        banknoteSelling: null,
-        bulletinNo: "synthetic",
-      }),
+      exchange: buildManualExchange(10, "USD", "TRY", financeDate, 40.25),
     });
     data.transactions.push({
       accountId: "smoke-card",
@@ -261,7 +251,7 @@ export async function verifyGoogleDeployment() {
       "Hesap, transfer ve taksit SQL kontrolü başarılı; iki kullanıcının finansal verileri ayrı.",
     );
     console.log(
-      "Döviz al / sat SQL yayın kontrolü başarılı; kur ve iki para birimi kayıpsız saklandı.",
+      "Döviz al / sat SQL yayın kontrolü başarılı; manuel kur ve iki para birimi kayıpsız saklandı.",
     );
     const other = await (await request("data", undefined, b.cookie)).json();
     check(other.revision === 1 && isDeepStrictEqual(other.data, emptyData()));

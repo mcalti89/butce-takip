@@ -11,9 +11,13 @@ import {
   validTime,
 } from "@/lib/budget/model";
 import { saveExchange, type AccountTransfer } from "@/lib/budget/finance";
-import { buildExchange, type CurrencyExchange } from "@/lib/budget/exchange";
-import { fetchFxRate } from "@/lib/budget/fxApi";
-import { rateSourceLabel, type FxCurrencyCode } from "@/lib/budget/fx";
+import {
+  buildManualExchange,
+  exchangeRateInput,
+  parseExchangeRate,
+  type CurrencyExchange,
+} from "@/lib/budget/exchange";
+import { rateSourceLabel } from "@/lib/budget/fx";
 import { Button, C, Card, ErrorText, Field, Sheet, Txt } from "./ui";
 
 export function ExchangeDetails({
@@ -23,6 +27,21 @@ export function ExchangeDetails({
   exchange: CurrencyExchange;
   currency: string;
 }) {
+  if (exchange.source === "MANUAL")
+    return (
+      <View style={{ gap: 5 }}>
+        <Txt style={{ color: C.blue, fontSize: 12 }}>
+          1{" "}
+          {exchange.rateDirection === "divide" ? exchange.toCurrency : currency}{" "}
+          ={" "}
+          {new Intl.NumberFormat("tr-TR", { maximumFractionDigits: 8 }).format(
+            exchange.manualRate,
+          )}{" "}
+          {exchange.rateDirection === "divide" ? currency : exchange.toCurrency}
+        </Txt>
+        <Txt style={{ color: C.muted, fontSize: 11 }}>Manuel kur</Txt>
+      </View>
+    );
   return (
     <View style={{ gap: 5 }}>
       <Txt style={{ color: C.blue, fontSize: 12 }}>
@@ -81,12 +100,43 @@ export function ExchangeEditor({
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
   const n = parseAmount(amount, source?.currency);
-  const key = JSON.stringify([fromId, toId, n, date]);
-  const [result, setResult] = useState<{
-    key: string;
-    exchange: CurrencyExchange;
-  } | null>(transfer?.exchange ? { key, exchange: transfer.exchange } : null);
-  const preview = result?.key === key ? result.exchange : undefined;
+  const initialRate = transfer?.exchange
+    ? exchangeRateInput(transfer.exchange, transfer.currency)
+    : "";
+  const [rateText, setRateText] = useState(initialRate);
+  const [rateEdited, setRateEdited] = useState(false);
+  const manualRate = parseExchangeRate(rateText);
+  const unchanged =
+    !!transfer &&
+    !rateEdited &&
+    fromId === transfer.fromId &&
+    toId === transfer.toId &&
+    n === transfer.amount &&
+    date === transfer.date &&
+    manualRate === parseExchangeRate(initialRate);
+  let preview: CurrencyExchange | undefined;
+  let previewError = "";
+  if (
+    source &&
+    target &&
+    Number.isFinite(n) &&
+    validDate(date) &&
+    Number.isFinite(manualRate)
+  ) {
+    try {
+      preview = unchanged
+        ? transfer.exchange
+        : buildManualExchange(
+            n,
+            source.currency,
+            target.currency,
+            date,
+            manualRate,
+          );
+    } catch (e) {
+      previewError = (e as Error).message;
+    }
+  }
   function checkInputs() {
     if (
       !source ||
@@ -102,44 +152,11 @@ export function ExchangeEditor({
         "Farklı para birimlerinde kaynak/hedef hesap, pozitif tutar ve hesap başlangıcından bugüne kadar geçerli bir tarih seç.",
       );
   }
-  async function calculate() {
-    setError("");
-    try {
-      checkInputs();
-      setBusy(true);
-      setResult(null);
-      const requestedKey = key;
-      const [from, to] = await Promise.all([
-        source!.currency === "TRY"
-          ? undefined
-          : fetchFxRate(source!.currency as FxCurrencyCode, date),
-        target!.currency === "TRY"
-          ? undefined
-          : fetchFxRate(target!.currency as FxCurrencyCode, date),
-      ]);
-      setResult({
-        key: requestedKey,
-        exchange: buildExchange(
-          n,
-          source!.currency,
-          target!.currency,
-          date,
-          from?.rate,
-          to?.rate,
-        ),
-      });
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  }
   async function save() {
     setError("");
     try {
       checkInputs();
-      if (!preview)
-        throw new Error("Önce işlem tarihinin kurunu getir ve hesapla.");
+      if (!preview) throw new Error("İşlemde uygulanan kuru kendin gir.");
       if (time.trim() && !validTime(time.trim()))
         throw new Error("Geçerli bir saat gir. Biçim: SS:DD (00:00–23:59).");
       setBusy(true);
@@ -183,9 +200,9 @@ export function ExchangeEditor({
           marginBottom: 16,
         }}
       >
-        Bozdururken TCMB döviz alış, satın alırken döviz satış kuru kullanılır.
-        Tatil ve hafta sonunda işlem tarihinden önceki son bülten esas alınır.
-        Bu kayıt gelir veya gider sayılmaz.
+        Bankanın işleminde uyguladığı kuru kendin gir. Hedef tutar bu kurla
+        hesaplanır ve kur işlemle birlikte kaydedilir. Bu kayıt gelir veya gider
+        sayılmaz.
       </Txt>
       <Txt bold>Çıkan hesap</Txt>
       <View
@@ -204,6 +221,7 @@ export function ExchangeEditor({
             kind={fromId === a.id ? "secondary" : "ghost"}
             disabled={busy}
             onPress={() => {
+              if (a.id !== fromId) setRateText("");
               setFrom(a.id);
               if (accounts.find((b) => b.id === toId)?.currency === a.currency)
                 setTo(
@@ -233,7 +251,10 @@ export function ExchangeEditor({
               small
               kind={toId === a.id ? "secondary" : "ghost"}
               disabled={busy}
-              onPress={() => setTo(a.id)}
+              onPress={() => {
+                if (a.id !== toId) setRateText("");
+                setTo(a.id);
+              }}
             >
               {a.name} · {a.currency}
             </Button>
@@ -268,14 +289,37 @@ export function ExchangeEditor({
         placeholder="14:30"
         editable={!busy}
       />
-      <Button
-        kind="secondary"
-        busy={busy}
-        disabled={!source || !target}
-        onPress={() => void calculate()}
-      >
-        Kuru getir ve hesapla
-      </Button>
+      <Field
+        label={`Kur (1 ${source?.currency === "TRY" ? (target?.currency ?? "döviz") : (source?.currency ?? "kaynak")} = ? ${source?.currency === "TRY" ? "TRY" : (target?.currency ?? "hedef")})`}
+        value={rateText}
+        onChangeText={(value) => {
+          setRateText(value);
+          setRateEdited(true);
+        }}
+        placeholder="Örn. 40,25"
+        keyboardType="decimal-pad"
+        inputMode="decimal"
+        maxLength={20}
+        editable={!busy}
+      />
+      <Txt style={{ color: C.dim, fontSize: 11, marginBottom: 12 }}>
+        1 birim için uygulanan kuru gir; virgül veya nokta ve en fazla 8 ondalık
+        kullanabilirsin.
+      </Txt>
+      {transfer?.exchange?.source === "TCMB" && unchanged ? (
+        <Txt style={{ color: C.muted, fontSize: 11, marginBottom: 12 }}>
+          Bu eski kayıt TCMB kuruyla oluşturulmuş. Yalnızca not veya saati
+          düzenlemek mevcut kuru korur; kur, tutar, hesap veya tarih değişirse
+          girdiğin kur kullanılır.
+        </Txt>
+      ) : null}
+      <ErrorText
+        message={
+          rateText.trim() && !Number.isFinite(manualRate)
+            ? "Sıfırdan büyük, en fazla 8 ondalıklı bir kur gir. Binlik ayırıcı kullanma."
+            : previewError
+        }
+      />
       {preview ? (
         <Card style={{ marginTop: 16, marginBottom: 16 }}>
           <Txt bold style={{ fontSize: 18, marginBottom: 10 }}>
@@ -287,13 +331,14 @@ export function ExchangeEditor({
             currency={source?.currency ?? transfer?.currency ?? "TRY"}
           />
           <Txt style={{ color: C.dim, fontSize: 11, marginTop: 10 }}>
-            Referans günlük kur kullanılır; banka veya döviz bürosunun gerçek
-            kuru farklı olabilir. Kullanılan kur bu kayda sabitlenir.
+            Kaydettiğin kuru daha sonra Döviz işlemini düzenle ekranından
+            değiştirebilirsin. İki hesabın bakiyesi birlikte yeniden hesaplanır.
           </Txt>
         </Card>
       ) : (
         <Txt style={{ color: C.dim, fontSize: 11, marginVertical: 12 }}>
-          Tutar, tarih veya hesap değişirse kuru yeniden hesapla.
+          Tutarı ve kuru girince hedef hesaba geçecek tutar burada görünür.
+          Hesap değiştirirsen ilgili kur alanını yeniden doldur.
         </Txt>
       )}
       <Field

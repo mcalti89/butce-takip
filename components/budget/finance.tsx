@@ -995,7 +995,7 @@ export function AccountsDashboard({
             </Button>
             <Txt style={{ color: C.muted, fontSize: 12, marginTop: 12 }}>
               {tab === "exchange"
-                ? "Dövizini işlem tarihindeki TCMB kuru ile bozdur veya satın al; tutar seçtiğin hesaba aktarılır. Farklı para birimlerinde nakit/banka hesapları gerekir."
+                ? "Bankanın işleminde uyguladığı kuru kendin gir; dövizini bozdur veya satın al. Kur kaydedilir ve sonradan düzenlenebilir. Farklı para birimlerinde nakit/banka hesapları gerekir."
                 : "Hesaplar arası transfer ve kart ödemelerini burada yönet."}{" "}
               Bu hareketler gelir veya gider sayılmaz.
             </Txt>

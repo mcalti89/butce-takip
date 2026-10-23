@@ -1,4 +1,4 @@
-import { buildExchange } from "../lib/budget/exchange";
+import { buildExchange, buildManualExchange } from "../lib/budget/exchange";
 import { saveExchange, accountBalance } from "../lib/budget/finance";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPool, type Pool, type RowDataPacket } from "mysql2/promise";
@@ -748,6 +748,117 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
         ).status,
       ).toBe(400);
       expect((await repository.read(user.accountId)).data).toEqual(doc);
+    });
+    it("manuel kur SQL'de saklanır, sonradan aynı kayıt üzerinde değiştirilir ve iki bakiyeyi düzeltir", async () => {
+      const user = await login(
+        "manual-" + randomUUID(),
+        `manual-${randomUUID()}@gmail.com`,
+      );
+      const other = await login(
+        "manual-other-" + randomUUID(),
+        `manual-${randomUUID()}@gmail.com`,
+      );
+      const initial = await (await call("data", undefined, user.cookie)).json();
+      let doc = emptyData();
+      doc.financialAccounts = [
+        {
+          id: "usd",
+          name: "Dolar",
+          kind: "bank",
+          currency: "USD",
+          openingBalance: 100,
+          openingDate: "2026-01-01",
+          archived: false,
+        },
+        {
+          id: "try",
+          name: "TL",
+          kind: "bank",
+          currency: "TRY",
+          openingBalance: 1000,
+          openingDate: "2026-01-01",
+          archived: false,
+        },
+      ];
+      const t = {
+        id: "manual",
+        fromId: "usd",
+        toId: "try",
+        amount: 25,
+        currency: "USD",
+        date: "2026-10-23",
+        note: "Manual bank rate",
+        exchange: buildManualExchange(25, "USD", "TRY", "2026-10-23", 40.25),
+      };
+      doc = saveExchange(doc, t);
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: initial.revision,
+              data: doc,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      const saved = await (await call("data", undefined, user.cookie)).json();
+      expect(saved.data).toEqual(doc);
+      expect(
+        (await repository.read(user.accountId)).data?.accountTransfers?.[0]
+          .exchange,
+      ).toMatchObject({ source: "MANUAL", manualRate: 40.25 });
+      doc = saveExchange(saved.data, {
+        ...t,
+        exchange: buildManualExchange(25, "USD", "TRY", "2026-10-23", 41.1),
+      });
+      expect(
+        (
+          await call(
+            "data",
+            { accountId: user.accountId, revision: saved.revision, data: doc },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      const edited = await (await call("data", undefined, user.cookie)).json();
+      expect(edited.data.accountTransfers).toHaveLength(1);
+      expect(edited.data.accountTransfers[0].exchange.manualRate).toBe(41.1);
+      expect(
+        accountBalance(
+          edited.data,
+          edited.data.financialAccounts[0],
+          "2026-10-23",
+        ),
+      ).toBe(75);
+      expect(
+        accountBalance(
+          edited.data,
+          edited.data.financialAccounts[1],
+          "2026-10-23",
+        ),
+      ).toBe(2027.5);
+      const invalid = structuredClone(doc);
+      invalid.accountTransfers![0].exchange!.toAmount = 999;
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: edited.revision,
+              data: invalid,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(400);
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
+      expect(
+        (await (await call("data", undefined, other.cookie)).json()).data,
+      ).toEqual(emptyData());
     });
     it("çıkış yalnızca ilgili oturumu kapatır", async () => {
       expect((await call("logout", {}, bob.cookie)).status).toBe(200);
