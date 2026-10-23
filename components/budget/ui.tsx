@@ -79,8 +79,10 @@ export function Button({
   busy,
   small,
   style,
+  accessibilityLabel,
 }: {
   children?: React.ReactNode;
+  accessibilityLabel?: string;
   onPress: () => void;
   icon?: string;
   kind?: "primary" | "secondary" | "ghost" | "danger";
@@ -94,7 +96,10 @@ export function Button({
   return (
     <Pressable
       accessibilityRole="button"
-      accessibilityLabel={typeof children === "string" ? children : undefined}
+      accessibilityLabel={
+        accessibilityLabel ??
+        (typeof children === "string" ? children : undefined)
+      }
       onPress={onPress}
       disabled={disabled || busy}
       style={({ pressed }) => [

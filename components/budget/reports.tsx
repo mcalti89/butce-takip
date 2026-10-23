@@ -16,6 +16,7 @@ import {
 } from "@/lib/budget/model";
 import {
   exportReportCSV,
+  dailyMonthReport,
   budgetAlerts,
   monthReport,
   nextMonthForecast,
@@ -528,6 +529,143 @@ function ComparisonChart({
     </View>
   );
 }
+function DailyMonthTable({
+  data,
+  month,
+  asOf,
+  mobile,
+}: {
+  data: BudgetData;
+  month: string;
+  asOf: string;
+  mobile: boolean;
+}) {
+  const report = dailyMonthReport(data, month, asOf);
+  const cell = {
+    flex: 1,
+    minWidth: 0,
+    textAlign: "right" as const,
+    fontSize: mobile ? 11 : 13,
+  };
+  return (
+    <Card style={{ padding: mobile ? 14 : 22 }}>
+      <Txt bold style={styles.sectionTitle}>
+        Günlük gelir ve gider
+      </Txt>
+      <Txt
+        style={{ color: C.muted, fontSize: 12, marginTop: 5, marginBottom: 15 }}
+      >
+        {monthLabel(month)} · TRY. Tüm takvim günleri gösterilir. Kayıtsız
+        geçmiş günler sıfır, henüz gelmeyen günler çizgiyle gösterilir.
+        Transferler ve açılış bakiyeleri gelir/gider sayılmaz.
+      </Txt>
+      <View
+        style={{
+          flexDirection: "row",
+          paddingVertical: 10,
+          borderBottomWidth: 1,
+          borderColor: C.border,
+        }}
+      >
+        <Txt bold style={{ width: mobile ? 45 : 110, fontSize: 12 }}>
+          Gün
+        </Txt>
+        <Txt bold style={cell}>
+          Gelir
+        </Txt>
+        <Txt bold style={cell}>
+          Gider
+        </Txt>
+        <Txt bold style={cell}>
+          Net
+        </Txt>
+      </View>
+      {report.rows.map((day) => (
+        <View
+          key={day.date}
+          accessible
+          accessibilityLabel={`${day.date}: ${day.future ? "Henüz gelmedi" : `Gelir ${money(day.income)}, gider ${money(day.expense)}, net ${money(day.net)}`}`}
+          style={{
+            flexDirection: "row",
+            alignItems: "center",
+            paddingVertical: 10,
+            borderBottomWidth: 1,
+            borderColor: C.border,
+            backgroundColor: day.date === asOf ? "#22C55E0A" : "transparent",
+          }}
+        >
+          <Txt
+            style={{
+              width: mobile ? 45 : 110,
+              color: day.future ? C.dim : C.muted,
+              fontSize: 12,
+            }}
+          >
+            {mobile
+              ? day.date.slice(8)
+              : day.date.slice(8) + "." + day.date.slice(5, 7)}
+            {day.date === asOf ? " •" : ""}
+          </Txt>
+          <Txt
+            style={[
+              cell,
+              { color: day.future ? C.dim : day.income ? C.green : C.muted },
+            ]}
+          >
+            {day.future ? "—" : money(day.income)}
+          </Txt>
+          <Txt
+            style={[
+              cell,
+              { color: day.future ? C.dim : day.expense ? C.red : C.muted },
+            ]}
+          >
+            {day.future ? "—" : money(day.expense)}
+          </Txt>
+          <Txt
+            style={[
+              cell,
+              {
+                color: day.future
+                  ? C.dim
+                  : day.net < 0
+                    ? C.red
+                    : day.net > 0
+                      ? C.green
+                      : C.muted,
+              },
+            ]}
+          >
+            {day.future ? "—" : money(day.net)}
+          </Txt>
+        </View>
+      ))}
+      <View
+        style={{ flexDirection: "row", paddingTop: 14, alignItems: "center" }}
+      >
+        <Txt bold style={{ width: mobile ? 45 : 110, fontSize: 11 }}>
+          Toplam
+        </Txt>
+        <Txt bold style={[cell, { color: C.green }]}>
+          {money(report.totals.income)}
+        </Txt>
+        <Txt bold style={[cell, { color: C.red }]}>
+          {money(report.totals.expense)}
+        </Txt>
+        <Txt
+          bold
+          style={[cell, { color: report.totals.net < 0 ? C.red : C.green }]}
+        >
+          {money(report.totals.net)}
+        </Txt>
+      </View>
+      <Txt style={{ color: C.dim, fontSize: 11, marginTop: 12 }}>
+        Döviz işlemleri kayıtlı sabit TL karşılığıyla gösterilir. Bugün • ile
+        işaretlidir. Günlük tablo raporun CSV dosyasına da dahildir.
+      </Txt>
+    </Card>
+  );
+}
 export function ReportsDashboard({
   data,
   month,
@@ -672,6 +810,7 @@ export function ReportsDashboard({
             : `%${r.current.savingsRate} · (gelir − gider) / gelir`}
         </Txt>
       </Card>
+      <DailyMonthTable data={data} month={month} asOf={asOf} mobile={mobile} />
       <BudgetWarnings data={data} month={month} onBudget={onBudget} />
       <Card>
         <Txt bold style={styles.sectionTitle}>

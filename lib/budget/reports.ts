@@ -375,6 +375,23 @@ export function exportReportCSV(
     [],
     ["Takvim ayı", "Gelir (TRY)", "Gider (TRY)", "Net (TRY)"],
     ...r.months.map((m) => [m.key, m.income, m.expense, m.net]),
+    [],
+    [
+      "Günlük tarih",
+      "Gelir (TRY)",
+      "Gider (TRY)",
+      "Net (TRY)",
+      "İşlem sayısı",
+      "Durum",
+    ],
+    ...dailyMonthReport(data, month, asOf).rows.map((day) => [
+      day.date,
+      day.future ? "" : day.income,
+      day.future ? "" : day.expense,
+      day.future ? "" : day.net,
+      day.future ? "" : day.count,
+      day.future ? "Henüz gelmedi" : "Gerçekleşen kayıtlar",
+    ]),
     [
       "Not",
       "Devam eden ay eksiktir. Döviz işlemleri kayıtlı TRY karşılığıyladır. Bu rapor tam veri yedeği değildir.",
@@ -401,4 +418,41 @@ export function exportReportCSV(
       )
       .join("\r\n")
   );
+}
+
+/** Realized income/expenses only; every calendar day is present, including zero days. */
+export function dailyMonthReport(
+  data: BudgetData,
+  month: string,
+  asOf: string,
+) {
+  const days = Number(monthEnd(month).slice(8));
+  const rows = Array.from({ length: days }, (_, index) => ({
+    date: `${month}-${String(index + 1).padStart(2, "0")}`,
+    income: 0,
+    expense: 0,
+    net: 0,
+    count: 0,
+    future: `${month}-${String(index + 1).padStart(2, "0")}` > asOf,
+  }));
+  for (const t of data.transactions) {
+    if (!t.date.startsWith(month + "-") || t.date > asOf) continue;
+    const row = rows[Number(t.date.slice(8)) - 1];
+    if (!row) continue;
+    row[t.type] += cents(t.baseAmount ?? t.amount);
+    row.count++;
+  }
+  for (const row of rows) {
+    row.income /= 100;
+    row.expense /= 100;
+    row.net = round(row.income - row.expense);
+  }
+  return {
+    rows,
+    totals: totals(
+      data.transactions.filter(
+        (t) => t.date.startsWith(month + "-") && t.date <= asOf,
+      ),
+    ),
+  };
 }

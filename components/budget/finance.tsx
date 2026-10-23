@@ -1,3 +1,4 @@
+import { AccountActivitySheet } from "./account-activity";
 import { currencyScale } from "@/lib/budget/currency";
 import React, { useState } from "react";
 import { View } from "react-native";
@@ -667,6 +668,10 @@ export function AccountsDashboard({
 }) {
   const { data, update } = useBudget();
   const [showArchived, setShowArchived] = useState(false);
+  const [activityId, setActivityId] = useState<string | null>(null);
+  const activityAccount = data.financialAccounts?.find(
+    (a) => a.id === activityId,
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [deleting, setDeleting] = useState<AccountTransfer | null>(null);
@@ -689,6 +694,14 @@ export function AccountsDashboard({
   }
   return (
     <View style={{ gap: 16 }}>
+      {activityAccount ? (
+        <AccountActivitySheet
+          key={activityAccount.id}
+          data={data}
+          account={activityAccount}
+          onClose={() => setActivityId(null)}
+        />
+      ) : null}
       <Card>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
           <Button
@@ -816,6 +829,15 @@ export function AccountsDashboard({
               </>
             ) : null}
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+              <Button
+                small
+                kind="secondary"
+                icon="list"
+                accessibilityLabel={`${a.name} aylık hareketleri`}
+                onPress={() => setActivityId(a.id)}
+              >
+                Aylık hareketler
+              </Button>
               <Button
                 small
                 kind="secondary"
