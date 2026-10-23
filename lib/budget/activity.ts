@@ -39,7 +39,7 @@ export function filterActivity(
       (filter === "all" || filter === "transfer") &&
       categoryId === "all" &&
       matches(
-        `Transfer ${t.note} ${data.financialAccounts?.find((a) => a.id === t.fromId)?.name ?? ""} ${data.financialAccounts?.find((a) => a.id === t.toId)?.name ?? ""} ${t.currency} ${data.financialAccounts?.find((a) => a.id === t.toId)?.kind === "card" ? "Kart ödemesi" : ""}`,
+        `Transfer ${t.exchange ? "Döviz al sat " + t.exchange.toCurrency : ""} ${t.note} ${data.financialAccounts?.find((a) => a.id === t.fromId)?.name ?? ""} ${data.financialAccounts?.find((a) => a.id === t.toId)?.name ?? ""} ${t.currency} ${data.financialAccounts?.find((a) => a.id === t.toId)?.kind === "card" ? "Kart ödemesi" : ""}`,
       ),
   );
   return {

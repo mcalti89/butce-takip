@@ -331,7 +331,8 @@ export function TransactionRows({
               </View>
               <View style={{ flex: 1, minWidth: 0 }}>
                 <Txt bold numberOfLines={1} style={{ fontSize: 13 }}>
-                  {t.note || "Hesaplar arası transfer"}
+                  {t.note ||
+                    (t.exchange ? "Döviz al / sat" : "Hesaplar arası transfer")}
                 </Txt>
                 <Txt style={{ color: C.muted, fontSize: 11 }}>
                   {from} → {to}
@@ -350,8 +351,13 @@ export function TransactionRows({
                   style={{ color: C.blue, fontSize: 13, textAlign: "right" }}
                 >
                   {moneyIn(t.amount, t.currency)}
+                  {t.exchange
+                    ? ` → ${moneyIn(t.exchange.toAmount, t.exchange.toCurrency)}`
+                    : ""}
                 </Txt>
-                <Txt style={{ color: C.blue, fontSize: 10 }}>Transfer</Txt>
+                <Txt style={{ color: C.blue, fontSize: 10 }}>
+                  {t.exchange ? "Döviz al / sat" : "Transfer"}
+                </Txt>
               </View>
               <Icon name="chevron-right" size={13} color={C.dim} />
             </Pressable>

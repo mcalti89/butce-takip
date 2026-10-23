@@ -1,3 +1,5 @@
+import { buildExchange } from "../lib/budget/exchange";
+import { saveExchange, accountBalance } from "../lib/budget/finance";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPool, type Pool, type RowDataPacket } from "mysql2/promise";
 import { readFile, readdir } from "node:fs/promises";
@@ -644,6 +646,108 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
           )
         ).status,
       ).toBe(400);
+    });
+    it("döviz al/sat iki hesabı tek SQL belgesinde kaydeder, bozuk kuru reddeder ve diğer kullanıcıdan ayırır", async () => {
+      const user = await login(
+        "exchange-" + randomUUID(),
+        `exchange-${randomUUID()}@gmail.com`,
+      );
+      const other = await login(
+        "exchange-other-" + randomUUID(),
+        `exchange-${randomUUID()}@gmail.com`,
+      );
+      const initial = await (await call("data", undefined, user.cookie)).json();
+      let doc = emptyData();
+      doc.financialAccounts = [
+        {
+          id: "usd",
+          name: "Dolar",
+          kind: "bank",
+          currency: "USD",
+          openingBalance: 100,
+          openingDate: "2026-01-01",
+          archived: false,
+        },
+        {
+          id: "try",
+          name: "TL",
+          kind: "bank",
+          currency: "TRY",
+          openingBalance: 0,
+          openingDate: "2026-01-01",
+          archived: false,
+        },
+      ];
+      doc = saveExchange(doc, {
+        id: "exchange",
+        fromId: "usd",
+        toId: "try",
+        currency: "USD",
+        amount: 25,
+        date: "2026-10-24",
+        time: "14:30",
+        note: "Synthetic exchange",
+        exchange: buildExchange(25, "USD", "TRY", "2026-10-24", {
+          currency: "USD",
+          currencyName: "Dolar",
+          date: "2026-10-23",
+          unit: 1,
+          forexBuying: 40,
+          forexSelling: 41,
+          banknoteBuying: null,
+          banknoteSelling: null,
+          bulletinNo: "1",
+        }),
+      });
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: initial.revision,
+              data: doc,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      const current = await (await call("data", undefined, user.cookie)).json();
+      expect(current.data).toEqual(doc);
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
+      expect(
+        accountBalance(
+          current.data,
+          current.data.financialAccounts[0],
+          "2026-10-24",
+        ),
+      ).toBe(75);
+      expect(
+        accountBalance(
+          current.data,
+          current.data.financialAccounts[1],
+          "2026-10-24",
+        ),
+      ).toBe(1000);
+      expect(
+        (await (await call("data", undefined, other.cookie)).json()).data,
+      ).toEqual(emptyData());
+      const invalid = structuredClone(doc);
+      invalid.accountTransfers![0].exchange!.toAmount = 2000;
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: current.revision,
+              data: invalid,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(400);
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
     });
     it("çıkış yalnızca ilgili oturumu kapatır", async () => {
       expect((await call("logout", {}, bob.cookie)).status).toBe(200);

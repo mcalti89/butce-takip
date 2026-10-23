@@ -1,3 +1,4 @@
+import { transferReceivedAmount } from "./exchange";
 import { compareDatedRecordsNewestFirst } from "./time";
 import type { BudgetData } from "./model";
 import { compareTransactionsNewestFirst } from "./model";
@@ -43,7 +44,7 @@ export function accountMonthActivity(
   const transferIn =
     transfers
       .filter((t) => t.toId === account.id)
-      .reduce((n, t) => n + units(t.amount), 0) / scale;
+      .reduce((n, t) => n + units(transferReceivedAmount(t)), 0) / scale;
   const transferOut =
     transfers
       .filter((t) => t.fromId === account.id)

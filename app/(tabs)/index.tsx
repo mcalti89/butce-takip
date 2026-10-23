@@ -1,3 +1,4 @@
+import { ExchangeEditor } from "@/components/budget/exchange";
 import { filterActivity, type ActivityFilter } from "@/lib/budget/activity";
 import { CategoryManager } from "@/components/budget/categories";
 import React, { useEffect, useRef, useState } from "react";
@@ -85,6 +86,7 @@ type Dialog =
       draft?: Partial<Transaction>;
     }
   | { kind: "account"; account?: FinancialAccount }
+  | { kind: "exchange"; transfer?: AccountTransfer }
   | {
       kind: "transfer";
       transfer?: AccountTransfer;
@@ -676,9 +678,15 @@ export default function BudgetApp() {
             ) : null}
             {page === "accounts" ? (
               <AccountsDashboard
+                onExchange={(transfer) =>
+                  setDialog({ kind: "exchange", transfer })
+                }
                 onAccount={(account) => setDialog({ kind: "account", account })}
                 onTransfer={(draft) =>
-                  setDialog({ kind: "transfer", ...draft })
+                  setDialog({
+                    ...draft,
+                    kind: draft?.transfer?.exchange ? "exchange" : "transfer",
+                  })
                 }
               />
             ) : null}
@@ -686,7 +694,10 @@ export default function BudgetApp() {
               <PaymentCalendar
                 month={month}
                 onTransfer={(draft) =>
-                  setDialog({ kind: "transfer", ...draft })
+                  setDialog({
+                    ...draft,
+                    kind: "transfer",
+                  })
                 }
                 onExecute={(o) =>
                   setDialog({
@@ -847,7 +858,10 @@ export default function BudgetApp() {
                       )}
                       accounts={data.financialAccounts}
                       onTransferPress={(transfer) =>
-                        setDialog({ kind: "transfer", transfer })
+                        setDialog({
+                          kind: transfer.exchange ? "exchange" : "transfer",
+                          transfer,
+                        })
                       }
                       categories={data.categories}
                       limit={5}
@@ -981,7 +995,10 @@ export default function BudgetApp() {
                     transfers={visibleActivity.transfers}
                     accounts={data.financialAccounts}
                     onTransferPress={(transfer) =>
-                      setDialog({ kind: "transfer", transfer })
+                      setDialog({
+                        kind: transfer.exchange ? "exchange" : "transfer",
+                        transfer,
+                      })
                     }
                     categories={data.categories}
                     onPress={(t) =>
@@ -1376,6 +1393,13 @@ export default function BudgetApp() {
       {dialog?.kind === "account" ? (
         <AccountEditor
           account={dialog.account}
+          onClose={close}
+          onDone={notify}
+        />
+      ) : null}
+      {dialog?.kind === "exchange" ? (
+        <ExchangeEditor
+          transfer={dialog.transfer}
           onClose={close}
           onDone={notify}
         />

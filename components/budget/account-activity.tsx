@@ -1,3 +1,4 @@
+import { transferReceivedAmount } from "@/lib/budget/exchange";
 import React, { useState } from "react";
 import { View } from "react-native";
 import {
@@ -221,9 +222,10 @@ export function AccountActivitySheet({
               }}
             >
               <Txt bold>
+                {t.exchange ? "Döviz al / sat · " : ""}
                 {incoming ? "Gelen transfer" : "Giden transfer"} ·{" "}
                 {incoming ? "+" : "−"}
-                {format(t.amount)}
+                {format(incoming ? transferReceivedAmount(t) : t.amount)}
               </Txt>
               <Txt style={{ color: C.muted, fontSize: 12 }}>
                 {t.date}

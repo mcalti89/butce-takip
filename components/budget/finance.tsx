@@ -1,3 +1,4 @@
+import { ExchangeDetails } from "./exchange";
 import { EntryTypeSelector } from "./entry-type";
 import { compareDatedRecordsNewestFirst } from "@/lib/budget/time";
 import { AccountActivitySheet } from "./account-activity";
@@ -692,9 +693,11 @@ export function PlanEditor({
   );
 }
 export function AccountsDashboard({
+  onExchange,
   onAccount,
   onTransfer,
 }: {
+  onExchange: (transfer?: AccountTransfer) => void;
   onAccount: (a?: FinancialAccount) => void;
   onTransfer: (draft?: {
     transfer?: AccountTransfer;
@@ -704,7 +707,9 @@ export function AccountsDashboard({
 }) {
   const { data, update } = useBudget();
   const [showArchived, setShowArchived] = useState(false);
-  const [tab, setTab] = useState<"accounts" | "transfers">("accounts");
+  const [tab, setTab] = useState<"accounts" | "transfers" | "exchange">(
+    "accounts",
+  );
   const [activityId, setActivityId] = useState<string | null>(null);
   const activityAccount = data.financialAccounts?.find(
     (a) => a.id === activityId,
@@ -752,6 +757,7 @@ export function AccountsDashboard({
               icon: "credit-card",
             },
             { id: "transfers", label: "Transferler", icon: "repeat" },
+            { id: "exchange", label: "Döviz al / sat", icon: "refresh-cw" },
           ] as const
         ).map((item) => (
           <Pressable
@@ -967,25 +973,52 @@ export function AccountsDashboard({
           <Card>
             <Button
               kind="secondary"
-              icon="repeat"
-              disabled={all.filter((a) => !a.archived).length < 2}
-              onPress={() => onTransfer()}
+              icon={tab === "exchange" ? "refresh-cw" : "repeat"}
+              disabled={
+                tab === "exchange"
+                  ? !all.some(
+                      (a) =>
+                        !a.archived &&
+                        a.kind !== "card" &&
+                        all.some(
+                          (b) =>
+                            !b.archived &&
+                            b.kind !== "card" &&
+                            b.currency !== a.currency,
+                        ),
+                    )
+                  : all.filter((a) => !a.archived).length < 2
+              }
+              onPress={() => (tab === "exchange" ? onExchange() : onTransfer())}
             >
-              Transfer / kart öde
+              {tab === "exchange" ? "Döviz işlemi ekle" : "Transfer / kart öde"}
             </Button>
             <Txt style={{ color: C.muted, fontSize: 12, marginTop: 12 }}>
-              Hesaplar arası transfer ve kart ödemelerini burada yönet. Bu
-              hareketler gelir veya gider sayılmaz.
+              {tab === "exchange"
+                ? "Dövizini işlem tarihindeki TCMB kuru ile bozdur veya satın al; tutar seçtiğin hesaba aktarılır. Farklı para birimlerinde nakit/banka hesapları gerekir."
+                : "Hesaplar arası transfer ve kart ödemelerini burada yönet."}{" "}
+              Bu hareketler gelir veya gider sayılmaz.
             </Txt>
           </Card>
           <Card>
             <Txt bold style={{ fontSize: 18, marginBottom: 12 }}>
-              Transfer geçmişi
+              {tab === "exchange"
+                ? "Döviz al / sat geçmişi"
+                : "Transfer geçmişi"}
             </Txt>
-            {!data.accountTransfers?.length ? (
-              <Txt style={{ color: C.muted }}>Henüz transfer yok.</Txt>
+            {!(data.accountTransfers ?? []).some((t) =>
+              tab === "exchange" ? !!t.exchange : !t.exchange,
+            ) ? (
+              <Txt style={{ color: C.muted }}>
+                {tab === "exchange"
+                  ? "Henüz döviz işlemi yok."
+                  : "Henüz transfer yok."}
+              </Txt>
             ) : (
               [...(data.accountTransfers ?? [])]
+                .filter((t) =>
+                  tab === "exchange" ? !!t.exchange : !t.exchange,
+                )
                 .sort(compareDatedRecordsNewestFirst)
                 .slice(0, 50)
                 .map((t) => (
@@ -1006,18 +1039,35 @@ export function AccountsDashboard({
                       {t.date}
                       {t.time ? ` ${t.time}` : ""} ·{" "}
                       {moneyIn(t.amount, t.currency)}
+                      {t.exchange
+                        ? ` → ${moneyIn(t.exchange.toAmount, t.exchange.toCurrency)}`
+                        : ""}
                       {t.note ? ` · ${t.note}` : ""}
                     </Txt>
-                    <View style={{ flexDirection: "row", gap: 6 }}>
+                    {t.exchange ? (
+                      <ExchangeDetails
+                        exchange={t.exchange}
+                        currency={t.currency}
+                      />
+                    ) : null}
+                    <View
+                      style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+                    >
                       <Button
                         small
                         kind="ghost"
-                        onPress={() => onTransfer({ transfer: t })}
+                        onPress={() =>
+                          t.exchange
+                            ? onExchange(t)
+                            : onTransfer({ transfer: t })
+                        }
                       >
-                        Transferi düzenle
+                        {t.exchange
+                          ? "Döviz işlemini düzenle"
+                          : "Transferi düzenle"}
                       </Button>
                       <Button small kind="ghost" onPress={() => setDeleting(t)}>
-                        Transferi sil
+                        {t.exchange ? "Döviz işlemini sil" : "Transferi sil"}
                       </Button>
                     </View>
                   </View>
@@ -1028,7 +1078,11 @@ export function AccountsDashboard({
       )}
       {deleting ? (
         <Sheet
-          title="Transfer silinsin mi?"
+          title={
+            deleting.exchange
+              ? "Döviz işlemi silinsin mi?"
+              : "Transfer silinsin mi?"
+          }
           onClose={() => {
             if (!busy) setDeleting(null);
           }}
@@ -1050,7 +1104,9 @@ export function AccountsDashboard({
                 .finally(() => setBusy(false));
             }}
           >
-            Transferi silmeyi onayla
+            {deleting.exchange
+              ? "Döviz işlemini silmeyi onayla"
+              : "Transferi silmeyi onayla"}
           </Button>
         </Sheet>
       ) : null}

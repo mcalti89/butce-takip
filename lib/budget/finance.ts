@@ -1,3 +1,8 @@
+import {
+  validExchange,
+  transferReceivedAmount,
+  type CurrencyExchange,
+} from "./exchange";
 import { validTime } from "./time";
 import { currencyScale, minorUnits } from "./currency";
 import type { BudgetData, Transaction } from "./model";
@@ -23,6 +28,7 @@ export type AccountTransfer = {
   date: string;
   note: string;
   time?: string;
+  exchange?: CurrencyExchange;
 };
 export type PaymentPlan = {
   id: string;
@@ -164,7 +170,8 @@ export function accountBalance(
   for (const t of data.accountTransfers ?? [])
     if (t.date <= asOf) {
       if (t.fromId === account.id) n -= cents(t.amount, currency);
-      if (t.toId === account.id) n += cents(t.amount, currency);
+      if (t.toId === account.id)
+        n += cents(transferReceivedAmount(t), currency);
     }
   return n / currencyScale(currency);
 }
@@ -275,6 +282,7 @@ export function saveTransfer(
   const from = data.financialAccounts?.find((a) => a.id === transfer.fromId),
     to = data.financialAccounts?.find((a) => a.id === transfer.toId);
   if (
+    transfer.exchange !== undefined ||
     !from ||
     !to ||
     from.archived ||
@@ -287,6 +295,38 @@ export function saveTransfer(
   if (transfer.date < from.openingDate || transfer.date < to.openingDate)
     throw new Error(
       "Transfer tarihi hesapların takip başlangıcından önce olamaz.",
+    );
+  const exists = data.accountTransfers?.some((t) => t.id === transfer.id);
+  return {
+    ...data,
+    accountTransfers: exists
+      ? data.accountTransfers!.map((t) => (t.id === transfer.id ? transfer : t))
+      : [...(data.accountTransfers ?? []), transfer],
+  };
+}
+/** Both currency legs and the fixed historical quote live in one atomic document update. */
+export function saveExchange(
+  data: BudgetData,
+  transfer: AccountTransfer,
+): BudgetData {
+  const from = data.financialAccounts?.find((a) => a.id === transfer.fromId),
+    to = data.financialAccounts?.find((a) => a.id === transfer.toId);
+  if (
+    !from ||
+    !to ||
+    from.archived ||
+    to.archived ||
+    !validExchange(transfer, from, to) ||
+    !moneyValid(transfer.amount, false, transfer.currency) ||
+    !dateValid(transfer.date) ||
+    (transfer.time !== undefined && !validTime(transfer.time)) ||
+    transfer.date < from.openingDate ||
+    transfer.date < to.openingDate ||
+    typeof transfer.note !== "string" ||
+    transfer.note.length > 300
+  )
+    throw new Error(
+      "Farklı para birimlerinde iki aktif nakit/banka hesabı, geçerli tutar, tarih ve kur seç.",
     );
   const exists = data.accountTransfers?.some((t) => t.id === transfer.id);
   return {
@@ -364,7 +404,9 @@ export function validFinanceData(data: BudgetData) {
       !f ||
       !to ||
       f.id === to.id ||
-      f.currency !== to.currency ||
+      (t.exchange !== undefined
+        ? !validExchange(t, f, to)
+        : f.currency !== to.currency) ||
       t.currency !== f.currency ||
       !moneyValid(t.amount, false, t.currency ?? "TRY") ||
       !dateValid(t.date) ||
