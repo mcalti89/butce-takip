@@ -74,39 +74,46 @@ export function AccountActivitySheet({
           Sonraki ay
         </Button>
       </View>
-      <View
-        style={{
-          flexDirection: "row",
-          flexWrap: "wrap",
-          gap: 12,
-          padding: 14,
-          borderRadius: 12,
-          backgroundColor: C.bg,
-        }}
-      >
-        {[
-          { label: "Aylık gelir", value: activity.income, color: C.green },
-          { label: "Aylık gider", value: activity.expense, color: C.red },
-          {
-            label: "Gelir − gider",
-            value: activity.net,
-            color: activity.net < 0 ? C.red : C.blue,
-          },
-        ].map((item) => (
-          <View
-            key={item.label}
-            style={{ flexGrow: 1, flexBasis: "45%", minWidth: 0 }}
-          >
-            <Txt style={{ color: C.muted, fontSize: 11 }}>{item.label}</Txt>
-            <Txt
-              bold
-              style={{ color: item.color, fontSize: 19, lineHeight: 28 }}
+      {account.kind === "investment" ? (
+        <Txt style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>
+          Yatırım hesabı genel hesaplamaların dışındadır. Burada yalnızca bu
+          hesabın bakiyesi ve kayıtlı geçmişi gösterilir.
+        </Txt>
+      ) : (
+        <View
+          style={{
+            flexDirection: "row",
+            flexWrap: "wrap",
+            gap: 12,
+            padding: 14,
+            borderRadius: 12,
+            backgroundColor: C.bg,
+          }}
+        >
+          {[
+            { label: "Aylık gelir", value: activity.income, color: C.green },
+            { label: "Aylık gider", value: activity.expense, color: C.red },
+            {
+              label: "Gelir − gider",
+              value: activity.net,
+              color: activity.net < 0 ? C.red : C.blue,
+            },
+          ].map((item) => (
+            <View
+              key={item.label}
+              style={{ flexGrow: 1, flexBasis: "45%", minWidth: 0 }}
             >
-              {format(item.value)}
-            </Txt>
-          </View>
-        ))}
-      </View>
+              <Txt style={{ color: C.muted, fontSize: 11 }}>{item.label}</Txt>
+              <Txt
+                bold
+                style={{ color: item.color, fontSize: 19, lineHeight: 28 }}
+              >
+                {format(item.value)}
+              </Txt>
+            </View>
+          ))}
+        </View>
+      )}
       <View style={{ gap: 6, marginVertical: 16 }}>
         <Txt style={{ color: C.muted, fontSize: 12 }}>
           Ay başı bakiyesi: {format(activity.opening)}

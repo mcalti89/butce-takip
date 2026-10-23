@@ -6,12 +6,16 @@ e-posta, SMS veya push bildirimi gönderilmez.
 
 ## Hesaplar ve bakiyeler
 
-Hesaplar & kartlar ekranından nakit, banka ve kredi kartı eklenir. Her hesabın
+Hesaplar & kartlar ekranından nakit, banka, kredi kartı ve yatırım hesabı eklenir. Her hesabın
 tek para birimi vardır. Açılış bakiyesi, takip başlangıç günündeki işlemlerden
 önceki bakiyedir; gelir veya gider oluşturmaz. Eski işlemler hesapsız kalır ve
 raporlarda korunur. İşlem düzenleyicisinden aynı para biriminde bir hesap seçilir.
-İşlem tarihi takip başlangıcından önce olamaz. İşlem/plan bağlı hesabın türü ve
-para birimi değiştirilemez; açılış düzeltmesi mevcut kayıtları geçersiz kılamaz.
+İşlem tarihi takip başlangıcından önce olamaz. Hareketi bağlı hesabın türü
+düzenlenebilir; para birimi değiştirilemez. Açılış düzeltmesi mevcut kayıtları
+geçersiz kılamaz. Tür değişimi geçmiş hareketleri ve bakiyenin işaretini korur.
+Yatırım hesabı genel hesaplamalardan, yeni gelir/gider ve plan seçimlerinden
+hariçtir; para aktarmak için normal transfer kullanılır. Geçmişe bağlı tür
+değişimi koşulları için [INVESTMENT-ACCOUNTS.md](INVESTMENT-ACCOUNTS.md).
 
 Bakiye = açılış + atanmış gelirler − atanmış giderler + gelen transferler − çıkan
 transferler. Gelecekteki işlemler bugünkü bakiyeye dahil edilmez. Döviz hesabı

@@ -1,3 +1,4 @@
+import { budgetTransactions } from "./account-scope";
 import type { BudgetData, Transaction } from "./model";
 import type { AccountTransfer } from "./finance";
 import { compareDatedRecordsNewestFirst } from "./time";
@@ -24,7 +25,7 @@ export function filterActivity(
   const query = search.trim().toLocaleLowerCase("tr-TR");
   const matches = (text: string) =>
     text.toLocaleLowerCase("tr-TR").includes(query);
-  const transactions = data.transactions.filter(
+  const transactions = budgetTransactions(data).filter(
     (t) =>
       t.date.startsWith(month + "-") &&
       (filter === "all" || filter === t.type) &&

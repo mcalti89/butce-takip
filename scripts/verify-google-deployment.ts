@@ -221,6 +221,24 @@ export async function verifyGoogleDeployment() {
       note: "Synthetic exchange",
       exchange: buildManualExchange(10, "USD", "TRY", financeDate, 40.25),
     });
+    data.financialAccounts.push({
+      id: "smoke-investment",
+      name: "Synthetic investment",
+      kind: "investment",
+      currency: "TRY",
+      openingBalance: 500000,
+      openingDate: financeDate,
+      archived: false,
+    });
+    data.accountTransfers.push({
+      id: "smoke-investment-funding",
+      fromId: "smoke-bank",
+      toId: "smoke-investment",
+      amount: 25,
+      currency: "TRY",
+      date: financeDate,
+      note: "Synthetic investment funding",
+    });
     data.transactions.push({
       accountId: "smoke-card",
       planId: "smoke-plan",
@@ -252,6 +270,9 @@ export async function verifyGoogleDeployment() {
     );
     console.log(
       "Döviz al / sat SQL yayın kontrolü başarılı; manuel kur ve iki para birimi kayıpsız saklandı.",
+    );
+    console.log(
+      "Yatırım SQL yayın kontrolü başarılı; hesap türü ve fon transferi kayıpsız saklandı.",
     );
     const other = await (await request("data", undefined, b.cookie)).json();
     check(other.revision === 1 && isDeepStrictEqual(other.data, emptyData()));

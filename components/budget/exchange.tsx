@@ -73,7 +73,7 @@ export function ExchangeEditor({
 }) {
   const { data, update } = useBudget();
   const accounts = (data.financialAccounts ?? []).filter(
-    (a) => !a.archived && a.kind !== "card",
+    (a) => !a.archived && a.kind !== "card" && a.kind !== "investment",
   );
   const [fromId, setFrom] = useState(
     transfer?.fromId ??

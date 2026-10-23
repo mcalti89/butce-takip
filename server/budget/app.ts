@@ -1,3 +1,4 @@
+import { validInvestmentChanges } from "./investments";
 import express, { type Request, type Response } from "express";
 import { parse as parseCookies } from "cookie";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -334,13 +335,26 @@ export function createBudgetApp(options: Options = {}) {
                 (previous.data?.[key]?.length ?? 0) > 0,
             )
           )
+            return res.status(409).json({
+              code: "APP_UPDATE_REQUIRED",
+              error:
+                "Bu ekran eski sürümde kaldı. Hesap ve planların korunması için sayfayı yenileyip tekrar dene.",
+            });
+        }
+        if (data.financialAccounts?.some((a) => a.kind === "investment")) {
+          const previous = await db.read(account.id);
+          if (previous.revision !== revision)
             return res
               .status(409)
               .json({
-                code: "APP_UPDATE_REQUIRED",
                 error:
-                  "Bu ekran eski sürümde kaldı. Hesap ve planların korunması için sayfayı yenileyip tekrar dene.",
+                  "Başka bir cihaz veya sekme verileri güncelledi. Son verileri yükleyip değişikliğini tekrar uygula.",
               });
+          if (!validInvestmentChanges(previous.data, data))
+            return res.status(400).json({
+              error:
+                "Yatırım hesabına yalnızca transfer eklenebilir. Geçmiş kayıtlar korunur; yeni gelir/gider, ödeme planı veya döviz dönüşümü için Nakit, Banka ya da Kredi kartı seç.",
+            });
         }
         const next = await db.write(account.id, revision, data, Date.now());
         if (next === null)

@@ -259,7 +259,7 @@ describe("Hesaplar, transferler ve plan muhasebesi", () => {
       }),
     ).toThrow();
   });
-  it("hareket bağlı hesabın türü/para birimi değiştirilmez", () => {
+  it("hareket bağlı hesabın türü değiştirilebilir, para birimi korunur", () => {
     const d = {
       ...data(),
       transactions: [{ ...transaction, accountId: "bank" }],
@@ -267,7 +267,12 @@ describe("Hesaplar, transferler ve plan muhasebesi", () => {
     expect(() =>
       saveFinancialAccount(d, { ...bank, currency: "USD" }),
     ).toThrow();
-    expect(() => saveFinancialAccount(d, { ...bank, kind: "cash" })).toThrow();
+    expect(
+      saveFinancialAccount(d, {
+        ...bank,
+        kind: "cash",
+      }).financialAccounts?.find((a) => a.id === bank.id)?.kind,
+    ).toBe("cash");
   });
   it("bakiye veya açık plan varken arşivlenmez; sıfır hesap geri açılabilir", () => {
     expect(() =>

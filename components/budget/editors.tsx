@@ -230,7 +230,8 @@ export function TransactionEditor({
           (!account ||
             account.currency !== currency ||
             date < account.openingDate ||
-            account.archived)
+            account.archived ||
+            account.kind === "investment")
         )
           throw new Error(
             "İşlem için aynı para biriminde bir hesap ve takip başlangıcından sonraki bir tarih seç.",
@@ -471,6 +472,7 @@ export function TransactionEditor({
           {(data.financialAccounts ?? [])
             .filter(
               (a) =>
+                a.kind !== "investment" &&
                 a.currency === currency &&
                 (!a.archived || a.id === initial?.accountId),
             )
@@ -620,7 +622,10 @@ export function TransactionEditor({
             fromId:
               accountId ||
               data.financialAccounts?.find(
-                (a) => !a.archived && a.currency === currency,
+                (a) =>
+                  !a.archived &&
+                  a.kind !== "investment" &&
+                  a.currency === currency,
               )?.id ||
               "",
             amount: Number.isFinite(parseAmount(amount, currency))

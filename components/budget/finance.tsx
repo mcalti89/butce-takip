@@ -1,3 +1,4 @@
+import { isInvestmentAccount } from "@/lib/budget/account-scope";
 import { ExchangeDetails } from "./exchange";
 import { EntryTypeSelector } from "./entry-type";
 import { compareDatedRecordsNewestFirst } from "@/lib/budget/time";
@@ -33,7 +34,12 @@ import {
   type PaymentOccurrence,
 } from "@/lib/budget/finance";
 import { Button, C, Card, ErrorText, Field, Icon, Sheet, Txt } from "./ui";
-const kindNames = { cash: "Nakit", bank: "Banka", card: "Kredi kartı" };
+const kindNames = {
+  cash: "Nakit",
+  bank: "Banka",
+  card: "Kredi kartı",
+  investment: "Yatırım",
+};
 function Choice({
   label,
   selected,
@@ -154,6 +160,7 @@ export function AccountEditor({
         "Kart limiti pozitif olmalı; kesim ve son ödeme günü 1–31 arasında olmalı.",
       );
     const entry: FinancialAccount = {
+      ...(account ?? {}),
       id: account?.id ?? id(),
       name: name.trim(),
       kind,
@@ -191,13 +198,19 @@ export function AccountEditor({
         maxLength={80}
       />
       <Choices>
-        {(["cash", "bank", "card"] as const).map((k) => (
+        {(["cash", "bank", "card", "investment"] as const).map((k) => (
           <Choice
             key={k}
             label={kindNames[k]}
             selected={kind === k}
-            disabled={used}
-            onPress={() => setKind(k)}
+            disabled={busy}
+            onPress={() => {
+              if ((kind === "card") !== (k === "card")) {
+                const value = balanceInput(opening, currency);
+                if (Number.isFinite(value)) setOpening(String(-value));
+              }
+              setKind(k);
+            }}
           />
         ))}
       </Choices>
@@ -246,6 +259,14 @@ export function AccountEditor({
         Başlangıç, seçtiğin günün işlemlerinden önceki bakiyedir. Eski işlemler
         otomatik olarak bu hesaba atanmaz.
       </Caption>
+      {kind === "investment" ? (
+        <Caption>
+          Yatırım bakiyesi genel toplamlara, bütçeye ve tahminlere katılmaz. Bu
+          hesaba transfer yapabilirsin; yeni gelir/gider, ödeme planı ve döviz
+          dönüşümü eklenmez. Önceki gelir/gider ve planlar korunur; hesap
+          yatırım türündeyken genel hesaplamalarda kullanılmaz.
+        </Caption>
+      ) : null}
       {kind === "card" ? (
         <>
           <Caption>
@@ -278,8 +299,9 @@ export function AccountEditor({
       ) : null}
       {used ? (
         <Caption>
-          İşlem bağlı hesabın türü ve para birimi sabittir. Tarih değişikliği
-          mevcut işlemleri geçersiz kılamaz.
+          Hesap türünü değiştirebilirsin; geçmiş kayıtların korunur. İşlem bağlı
+          hesabın para birimi sabittir. Tarih değişikliği mevcut işlemleri
+          geçersiz kılamaz.
         </Caption>
       ) : null}
       <ErrorText message={error} />
@@ -470,6 +492,7 @@ export function PlanEditor({
   const accounts = (data.financialAccounts ?? []).filter(
     (a) =>
       !a.archived &&
+      a.kind !== "investment" &&
       a.currency === currency &&
       (kind !== "installment" || a.kind === "card"),
   );
@@ -517,7 +540,10 @@ export function PlanEditor({
         if (
           entry.accountId &&
           !d.financialAccounts?.some(
-            (a) => a.id === entry.accountId && !a.archived,
+            (a) =>
+              a.id === entry.accountId &&
+              !a.archived &&
+              a.kind !== "investment",
           )
         )
           throw new Error("Plan için aktif bir hesap seç.");
@@ -721,7 +747,11 @@ export function AccountsDashboard({
     visible = all.filter((a) => showArchived || !a.archived);
   const now = today();
   const currencies = [
-    ...new Set(all.filter((a) => !a.archived).map((a) => a.currency)),
+    ...new Set(
+      all
+        .filter((a) => !a.archived && a.kind !== "investment")
+        .map((a) => a.currency),
+    ),
   ];
   async function archive(a: FinancialAccount) {
     setBusy(true);
@@ -817,11 +847,14 @@ export function AccountsDashboard({
             <Txt style={{ color: C.muted, fontSize: 12, marginTop: 12 }}>
               Bakiyeler {now} tarihine kadarki atanmış işlemlerden hesaplanır.
               Hesapsız eski kayıtlar raporlarında kalır. Farklı para birimleri
-              birbirine eklenmez.
+              birbirine eklenmez. Yatırım hesapları yalnızca kendi bakiyesiyle
+              gösterilir; hesap toplamı, net varlık ve tahminlere dahil edilmez.
             </Txt>
           </Card>
           {currencies.map((c) => {
-            const accounts = all.filter((a) => !a.archived && a.currency === c);
+            const accounts = all.filter(
+              (a) => !a.archived && a.kind !== "investment" && a.currency === c,
+            );
             const assets = accounts
               .filter((a) => a.kind !== "card")
               .reduce((n, a) => n + accountBalance(data, a, now), 0);
@@ -847,8 +880,8 @@ export function AccountsDashboard({
                 Hesaplarını ekleyerek başla
               </Txt>
               <Txt style={{ color: C.muted, marginTop: 8 }}>
-                Nakit, banka veya kredi kartı oluştur. Var olan gelir ve
-                giderlerin hiçbir hesaba otomatik atanmaz.
+                Nakit, banka, kredi kartı veya yatırım hesabı oluştur. Var olan
+                gelir ve giderlerin hiçbir hesaba otomatik atanmaz.
               </Txt>
               <Button style={{ marginTop: 14 }} onPress={() => onAccount()}>
                 İlk hesabını ekle
@@ -881,9 +914,11 @@ export function AccountsDashboard({
                     name={
                       a.kind === "card"
                         ? "credit-card"
-                        : a.kind === "cash"
-                          ? "pocket"
-                          : "briefcase"
+                        : a.kind === "investment"
+                          ? "trending-up"
+                          : a.kind === "cash"
+                            ? "pocket"
+                            : "briefcase"
                     }
                     color={C.green}
                   />
@@ -898,6 +933,12 @@ export function AccountsDashboard({
                 >
                   {moneyIn(a.kind === "card" ? -balance : balance, a.currency)}
                 </Txt>
+                {a.kind === "investment" ? (
+                  <Caption>
+                    Yatırım bakiyesi · Genel hesaplamaların dışında. Para
+                    aktarmak için Transferler sekmesini kullan.
+                  </Caption>
+                ) : null}
                 {a.kind === "card" ? (
                   <>
                     <Caption>
@@ -980,10 +1021,12 @@ export function AccountsDashboard({
                       (a) =>
                         !a.archived &&
                         a.kind !== "card" &&
+                        a.kind !== "investment" &&
                         all.some(
                           (b) =>
                             !b.archived &&
                             b.kind !== "card" &&
+                            b.kind !== "investment" &&
                             b.currency !== a.currency,
                         ),
                     )
@@ -1251,32 +1294,34 @@ export function PaymentCalendar({
           {showPlans ? "Plan listesini kapat" : "Tüm planları yönet"}
         </Button>
         {showPlans
-          ? (data.paymentPlans ?? []).map((p) => (
-              <View
-                key={p.id}
-                style={{
-                  paddingVertical: 12,
-                  borderTopWidth: 1,
-                  borderColor: C.border,
-                  gap: 6,
-                }}
-              >
-                <Txt bold>
-                  {p.title} · {p.archived ? "Arşivde" : "Aktif"}
-                </Txt>
-                <Txt style={{ color: C.muted, fontSize: 12 }}>
-                  {p.kind === "installment"
-                    ? `${p.count} taksit · toplam `
-                    : p.kind === "monthly"
-                      ? "Her ay · "
-                      : "Tek sefer · "}
-                  {moneyIn(p.amount, p.currency)}
-                </Txt>
-                <Button small kind="ghost" onPress={() => setClosing(p)}>
-                  {p.archived ? "Planı yeniden aç" : "Planı arşivle"}
-                </Button>
-              </View>
-            ))
+          ? (data.paymentPlans ?? [])
+              .filter((p) => !isInvestmentAccount(data, p.accountId))
+              .map((p) => (
+                <View
+                  key={p.id}
+                  style={{
+                    paddingVertical: 12,
+                    borderTopWidth: 1,
+                    borderColor: C.border,
+                    gap: 6,
+                  }}
+                >
+                  <Txt bold>
+                    {p.title} · {p.archived ? "Arşivde" : "Aktif"}
+                  </Txt>
+                  <Txt style={{ color: C.muted, fontSize: 12 }}>
+                    {p.kind === "installment"
+                      ? `${p.count} taksit · toplam `
+                      : p.kind === "monthly"
+                        ? "Her ay · "
+                        : "Tek sefer · "}
+                    {moneyIn(p.amount, p.currency)}
+                  </Txt>
+                  <Button small kind="ghost" onPress={() => setClosing(p)}>
+                    {p.archived ? "Planı yeniden aç" : "Planı arşivle"}
+                  </Button>
+                </View>
+              ))
           : null}
       </Card>
       {closing ? (

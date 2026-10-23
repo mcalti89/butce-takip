@@ -1,3 +1,4 @@
+import { isInvestmentAccount } from "./account-scope";
 import {
   validExchange,
   transferReceivedAmount,
@@ -10,7 +11,7 @@ import { SUPPORTED_CURRENCY_CODES } from "./fx";
 export type FinancialAccount = {
   id: string;
   name: string;
-  kind: "cash" | "bank" | "card";
+  kind: "cash" | "bank" | "card" | "investment";
   currency: string;
   openingBalance: number;
   openingDate: string;
@@ -122,6 +123,7 @@ export function paymentOccurrences(
   );
   const out: PaymentOccurrence[] = [];
   for (const plan of data.paymentPlans ?? []) {
+    if (isInvestmentAccount(data, plan.accountId)) continue;
     if (plan.archived && !data.transactions.some((t) => t.planId === plan.id))
       continue;
     const startMonth =
@@ -176,6 +178,7 @@ export function accountBalance(
   return n / currencyScale(currency);
 }
 export function pendingInstallments(data: BudgetData, accountId: string) {
+  if (isInvestmentAccount(data, accountId)) return 0;
   const paid = new Set(
     data.transactions
       .filter((t) => t.planId !== undefined)
@@ -244,14 +247,31 @@ export function saveFinancialAccount(
       (t) => t.fromId === account.id || t.toId === account.id,
     ) ||
     (data.paymentPlans ?? []).some((p) => p.accountId === account.id);
-  if (
-    previous &&
-    used &&
-    (previous.currency !== account.currency || previous.kind !== account.kind)
-  )
+  if (previous && used && previous.currency !== account.currency)
     throw new Error(
-      "İşlem veya plan bağlı hesabın türü ve para birimi değiştirilemez.",
+      "İşlem veya plan bağlı hesabın para birimi değiştirilemez.",
     );
+  if (previous && previous.kind !== account.kind) {
+    if (
+      account.kind !== "card" &&
+      account.kind !== "investment" &&
+      data.paymentPlans?.some(
+        (p) => p.accountId === account.id && p.kind === "installment",
+      )
+    )
+      throw new Error(
+        "Taksit geçmişi bağlı hesabı Kredi kartı veya Yatırım türünde tut. Diğer türler için önce taksit bağlantılarını düzenle.",
+      );
+    if (
+      account.kind === "card" &&
+      data.accountTransfers?.some(
+        (t) => t.exchange && (t.fromId === account.id || t.toId === account.id),
+      )
+    )
+      throw new Error(
+        "Döviz dönüşümü geçmişi bağlı hesap Kredi kartı yapılamaz; Nakit, Banka veya Yatırım seçebilirsin.",
+      );
+  }
   if (
     data.transactions.some(
       (t) => t.accountId === account.id && t.date < account.openingDate,
@@ -316,6 +336,8 @@ export function saveExchange(
     !to ||
     from.archived ||
     to.archived ||
+    from.kind === "investment" ||
+    to.kind === "investment" ||
     !validExchange(transfer, from, to) ||
     !moneyValid(transfer.amount, false, transfer.currency) ||
     !dateValid(transfer.date) ||
@@ -375,7 +397,7 @@ export function validFinanceData(data: BudgetData) {
   const byId = new Map(accounts.map((a) => [a.id, a]));
   for (const a of accounts) {
     if (
-      !["cash", "bank", "card"].includes(a.kind) ||
+      !["cash", "bank", "card", "investment"].includes(a.kind) ||
       typeof a.name !== "string" ||
       !a.name.trim() ||
       a.name.length > 80 ||
@@ -450,7 +472,7 @@ export function validFinanceData(data: BudgetData) {
     if (
       p.kind === "installment" &&
       (!a ||
-        a.kind !== "card" ||
+        (a.kind !== "card" && a.kind !== "investment") ||
         p.type !== "expense" ||
         !Number.isInteger(p.count) ||
         p.count! < 2 ||

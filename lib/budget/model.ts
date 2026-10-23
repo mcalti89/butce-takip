@@ -1,3 +1,4 @@
+import { budgetTransactions } from "./account-scope";
 import { validTime, compareDatedRecordsNewestFirst } from "./time";
 export { localTime, validTime } from "./time";
 import { currencyDigits, currencyScale } from "./currency";
@@ -284,7 +285,7 @@ export function demoData(): BudgetData {
   return data;
 }
 export function summarize(data: BudgetData, month: string) {
-  const transactions = data.transactions.filter(
+  const transactions = budgetTransactions(data).filter(
     (t) => t.date.slice(0, 7) === month,
   );
   const income = sum(transactions.filter((t) => t.type === "income"));

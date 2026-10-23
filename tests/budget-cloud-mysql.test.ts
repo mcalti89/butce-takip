@@ -1,5 +1,12 @@
+import { summarize } from "../lib/budget/model";
+import { nextMonthForecast } from "../lib/budget/reports";
 import { buildExchange, buildManualExchange } from "../lib/budget/exchange";
-import { saveExchange, accountBalance } from "../lib/budget/finance";
+import {
+  saveExchange,
+  accountBalance,
+  saveFinancialAccount,
+  saveTransfer,
+} from "../lib/budget/finance";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 import { createPool, type Pool, type RowDataPacket } from "mysql2/promise";
 import { readFile, readdir } from "node:fs/promises";
@@ -859,6 +866,198 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
       expect(
         (await (await call("data", undefined, other.cookie)).json()).data,
       ).toEqual(emptyData());
+    });
+    it("yatırım türünü, fon transferini ve kullanılan hesapta tür değişimini SQL'de korur; yatırım için yeni işlemleri reddeder", async () => {
+      const user = await login(
+        "investment-" + randomUUID(),
+        `investment-${randomUUID()}@gmail.com`,
+      );
+      const other = await login(
+        "investment-other-" + randomUUID(),
+        `investment-${randomUUID()}@gmail.com`,
+      );
+      const initial = await (await call("data", undefined, user.cookie)).json();
+      let doc = emptyData();
+      doc.financialAccounts = [
+        {
+          id: "bank",
+          name: "Bank",
+          kind: "bank",
+          currency: "TRY",
+          openingBalance: 1000,
+          openingDate: "2026-01-01",
+          archived: false,
+        },
+        {
+          id: "cash",
+          name: "Cash",
+          kind: "cash",
+          currency: "TRY",
+          openingBalance: 1000,
+          openingDate: "2026-01-01",
+          archived: false,
+        },
+        {
+          id: "usd",
+          name: "USD",
+          kind: "bank",
+          currency: "USD",
+          openingBalance: 50,
+          openingDate: "2026-01-01",
+          archived: false,
+        },
+      ];
+      doc.transactions = [
+        {
+          id: "history",
+          accountId: "bank",
+          date: "2026-10-01",
+          amount: 100,
+          type: "expense",
+          categoryId: "market",
+          description: "Past expense",
+        },
+      ];
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: initial.revision,
+              data: doc,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      let current = await (await call("data", undefined, user.cookie)).json();
+      doc = saveFinancialAccount(doc, {
+        ...doc.financialAccounts![0],
+        kind: "investment",
+      });
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: current.revision,
+              data: doc,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      current = await (await call("data", undefined, user.cookie)).json();
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
+      expect(current.data.transactions).toHaveLength(1);
+      expect(summarize(current.data, "2026-10").expense).toBe(0);
+      const expense = structuredClone(doc);
+      expense.transactions.push({ ...expense.transactions[0], id: "new" });
+      const planned = structuredClone(doc);
+      planned.paymentPlans = [
+        {
+          id: "new-plan",
+          title: "Investment plan",
+          kind: "once",
+          type: "expense",
+          amount: 10,
+          currency: "TRY",
+          categoryId: "market",
+          accountId: "bank",
+          startDate: "2026-10-24",
+          archived: false,
+        },
+      ];
+      const fx = structuredClone(doc);
+      fx.accountTransfers = [
+        {
+          id: "new-fx",
+          fromId: "usd",
+          toId: "bank",
+          currency: "USD",
+          amount: 10,
+          date: "2026-10-23",
+          note: "FX",
+          exchange: buildManualExchange(10, "USD", "TRY", "2026-10-23", 40),
+        },
+      ];
+      for (const invalid of [expense, planned, fx])
+        expect(
+          (
+            await call(
+              "data",
+              {
+                accountId: user.accountId,
+                revision: current.revision,
+                data: invalid,
+              },
+              user.cookie,
+            )
+          ).status,
+        ).toBe(400);
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
+      doc = saveTransfer(doc, {
+        id: "fund",
+        fromId: "cash",
+        toId: "bank",
+        amount: 200,
+        currency: "TRY",
+        date: "2026-10-23",
+        note: "Investment funding",
+      });
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: current.revision,
+              data: doc,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      current = await (await call("data", undefined, user.cookie)).json();
+      expect(
+        accountBalance(
+          current.data,
+          current.data.financialAccounts[0],
+          "2026-10-23",
+        ),
+      ).toBe(1100);
+      expect(
+        nextMonthForecast(current.data, "2026-10-23").rows.find(
+          (r) => r.currency === "TRY",
+        )?.current,
+      ).toBe(800);
+      expect(
+        (await (await call("data", undefined, other.cookie)).json()).data,
+      ).toEqual(emptyData());
+      doc = saveFinancialAccount(doc, {
+        ...doc.financialAccounts![0],
+        kind: "bank",
+      });
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: current.revision,
+              data: doc,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      const restored = await (
+        await call("data", undefined, user.cookie)
+      ).json();
+      expect(restored.data.transactions).toEqual(doc.transactions);
+      expect(summarize(restored.data, "2026-10").expense).toBe(100);
     });
     it("çıkış yalnızca ilgili oturumu kapatır", async () => {
       expect((await call("logout", {}, bob.cookie)).status).toBe(200);

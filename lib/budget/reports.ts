@@ -1,3 +1,4 @@
+import { budgetTransactions } from "./account-scope";
 import { currencyScale, minorUnits } from "./currency";
 import { type BudgetData, type Transaction, shiftMonth } from "./model";
 import { accountBalance, paymentOccurrences } from "./finance";
@@ -34,6 +35,7 @@ export function monthReport(
   asOf: string,
   matched = true,
 ) {
+  const transactions = budgetTransactions(data);
   const previousMonth = shiftMonth(month, -1);
   const partial = month === asOf.slice(0, 7) && asOf < monthEnd(month);
   const currentEnd =
@@ -46,10 +48,10 @@ export function monthReport(
     partial && matched
       ? dayInMonth(previousMonth, Number(asOf.slice(8)))
       : monthEnd(previousMonth);
-  const rows = data.transactions.filter(
+  const rows = transactions.filter(
     (t) => t.date.startsWith(month + "-") && t.date <= currentEnd,
   );
-  const previousRows = data.transactions.filter(
+  const previousRows = transactions.filter(
     (t) =>
       t.date.startsWith(previousMonth + "-") &&
       t.date <= previousEnd &&
@@ -62,7 +64,7 @@ export function monthReport(
     return {
       key,
       ...totals(
-        data.transactions.filter(
+        transactions.filter(
           (t) => t.date.startsWith(key + "-") && t.date <= asOf,
         ),
       ),
@@ -80,7 +82,7 @@ export function monthReport(
       const history = months.map((m) => ({
         month: m.key,
         amount: totals(
-          data.transactions.filter(
+          transactions.filter(
             (t) =>
               t.type === "expense" &&
               t.categoryId === category.id &&
@@ -193,11 +195,14 @@ export function nextMonthForecast(
   asOf: string,
   includeOverdue = false,
 ) {
+  const transactions = budgetTransactions(data);
   const currentMonth = asOf.slice(0, 7),
     nextMonth = shiftMonth(currentMonth, 1);
   const currentEnd = monthEnd(currentMonth),
     end = monthEnd(nextMonth);
-  const accounts = (data.financialAccounts ?? []).filter((a) => !a.archived);
+  const accounts = (data.financialAccounts ?? []).filter(
+    (a) => !a.archived && a.kind !== "investment",
+  );
   const currencies = new Set(accounts.map((a) => a.currency));
   const events: ForecastEvent[] = [];
   for (const account of accounts)
@@ -211,7 +216,7 @@ export function nextMonthForecast(
         source: "opening",
         accountId: account.id,
       });
-  for (const t of data.transactions)
+  for (const t of transactions)
     if (
       t.accountId &&
       accounts.some((a) => a.id === t.accountId) &&
@@ -325,7 +330,7 @@ export function nextMonthForecast(
     rows,
     events,
     hasAccounts: accounts.length > 0,
-    unassignedTransactions: data.transactions.filter(
+    unassignedTransactions: transactions.filter(
       (t) => !t.accountId && t.date <= asOf,
     ).length,
   };
@@ -426,6 +431,7 @@ export function dailyMonthReport(
   month: string,
   asOf: string,
 ) {
+  const transactions = budgetTransactions(data);
   const days = Number(monthEnd(month).slice(8));
   const rows = Array.from({ length: days }, (_, index) => ({
     date: `${month}-${String(index + 1).padStart(2, "0")}`,
@@ -435,7 +441,7 @@ export function dailyMonthReport(
     count: 0,
     future: `${month}-${String(index + 1).padStart(2, "0")}` > asOf,
   }));
-  for (const t of data.transactions) {
+  for (const t of transactions) {
     if (!t.date.startsWith(month + "-") || t.date > asOf) continue;
     const row = rows[Number(t.date.slice(8)) - 1];
     if (!row) continue;
@@ -450,7 +456,7 @@ export function dailyMonthReport(
   return {
     rows,
     totals: totals(
-      data.transactions.filter(
+      transactions.filter(
         (t) => t.date.startsWith(month + "-") && t.date <= asOf,
       ),
     ),
