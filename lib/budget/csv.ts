@@ -8,6 +8,8 @@ import {
   id,
   parseAmount,
   validDate,
+  validTime,
+  compareTransactionsNewestFirst,
 } from "./model";
 import { parseFxNumber, SUPPORTED_CURRENCY_CODES } from "./fx";
 export type ImportResult = {
@@ -31,6 +33,7 @@ const fingerprint = (t: Transaction) =>
     t.amount,
     t.currency || "TRY",
     t.date,
+    t.time ?? "",
     t.description,
   ].join("|");
 function parseRows(text: string): string[][] {
@@ -89,6 +92,7 @@ export function importCSV(text: string, data: BudgetData): ImportResult {
   const headers = rows[0].map(normalize);
   const aliases: Record<string, string[]> = {
     date: ["date", "tarih"],
+    time: ["time", "saat", "islem saati"],
     type: ["type", "tur", "tip"],
     category: ["category", "kategori"],
     amount: ["amount", "tutar"],
@@ -127,6 +131,7 @@ export function importCSV(text: string, data: BudgetData): ImportResult {
     result.total++;
     const row = rows[i];
     const date = (row[col.date] || "").trim();
+    const time = (row[col.time] || "").trim();
     const rawType = normalize(row[col.type] || "");
     const type: TransactionType | undefined = ["income", "gelir"].includes(
       rawType,
@@ -147,6 +152,7 @@ export function importCSV(text: string, data: BudgetData): ImportResult {
     const description = unescape(row[col.description] || "");
     if (
       !validDate(date) ||
+      (time !== "" && !validTime(time)) ||
       !type ||
       !Number.isFinite(amount) ||
       !name ||
@@ -170,7 +176,7 @@ export function importCSV(text: string, data: BudgetData): ImportResult {
           fxSide !== (type === "income" ? "buying" : "selling")))
     ) {
       result.errors.push(
-        `Satır ${i + 1}: tarih (YYYY-MM-DD), tür (income/expense), pozitif tutar ve kategori gerekli. Kategori en fazla 40, açıklama 300 karakter.`,
+        `Satır ${i + 1}: tarih (YYYY-MM-DD), varsa saat (SS:DD), tür (income/expense), pozitif tutar ve kategori gerekli. Kategori en fazla 40, açıklama 300 karakter.`,
       );
       continue;
     }
@@ -195,6 +201,7 @@ export function importCSV(text: string, data: BudgetData): ImportResult {
     const transaction: Transaction = {
       id: importedId || id(),
       date,
+      ...(time ? { time } : {}),
       type,
       amount,
       categoryId: category.id,
@@ -240,12 +247,13 @@ export function exportCSV(data: BudgetData): string {
       "fxUnit",
       "fxDate",
       "fxSide",
+      "time",
     ]
       .map(csvCell)
       .join(","),
   ];
   [...data.transactions]
-    .sort((a, b) => a.date.localeCompare(b.date))
+    .sort((a, b) => -compareTransactionsNewestFirst(a, b))
     .forEach((t) =>
       rows.push(
         [
@@ -263,6 +271,7 @@ export function exportCSV(data: BudgetData): string {
           t.currency && t.currency !== "TRY" ? (t.fxUnit ?? "").toString() : "",
           t.currency && t.currency !== "TRY" ? t.fxDate || "" : "",
           t.currency && t.currency !== "TRY" ? t.fxSide || "" : "",
+          t.time ?? "",
         ]
           .map(csvCell)
           .join(","),
@@ -271,4 +280,4 @@ export function exportCSV(data: BudgetData): string {
   return "\uFEFF" + rows.join("\r\n");
 }
 export const CSV_TEMPLATE =
-  "\uFEFFdate,type,category,amount,description,currency,baseAmount,fxRate,fxUnit,fxDate,fxSide\r\n2026-10-01,income,Maaş,32000.00,Aylık maaş,TRY,,,,,\r\n2026-10-02,expense,Market,10.00,Örnek döviz işlemi,USD,496.02,49.6015,1,2026-10-21,selling";
+  "\uFEFFdate,type,category,amount,description,currency,baseAmount,fxRate,fxUnit,fxDate,fxSide,time\r\n2026-10-01,income,Maaş,32000.00,Aylık maaş,TRY,,,,,,09:00\r\n2026-10-02,expense,Market,10.00,Örnek döviz işlemi,USD,496.02,49.6015,1,2026-10-21,selling,14:30";

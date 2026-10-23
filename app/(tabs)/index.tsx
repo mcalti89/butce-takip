@@ -1176,14 +1176,14 @@ export default function BudgetApp() {
                         lineHeight: 19,
                       }}
                     >
-                      date,type,category,amount,description{"\n"}
-                      2026-10-02,expense,Market,450.50,Alışveriş
+                      date,type,category,amount,description,time{"\n"}
+                      2026-10-02,expense,Market,450.50,Alışveriş,14:30
                     </Txt>
                   </View>
                   <Txt style={{ color: C.dim, fontSize: 11, marginTop: 10 }}>
-                    Tarih: YYYY-MM-DD · Tür: income/expense veya gelir/gider ·
-                    Ayraç: virgül ya da noktalı virgül · En fazla 5 MB / 10.000
-                    işlem.
+                    Tarih: YYYY-MM-DD · Saat: SS:DD (isteğe bağlı) · Tür:
+                    income/expense veya gelir/gider · Ayraç: virgül ya da
+                    noktalı virgül · En fazla 5 MB / 10.000 işlem.
                   </Txt>
                 </Card>
                 <Card>

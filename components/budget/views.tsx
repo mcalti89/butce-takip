@@ -8,6 +8,7 @@ import {
   money,
   moneyIn,
   summarize,
+  compareTransactionsNewestFirst,
 } from "@/lib/budget/model";
 import { C, Card, Empty, Icon, Progress, Txt, styles } from "./ui";
 export function Metrics({
@@ -275,9 +276,7 @@ export function TransactionRows({
   onPress: (t: Transaction) => void;
   limit?: number;
 }) {
-  const rows = [...transactions].sort(
-    (a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id),
-  );
+  const rows = [...transactions].sort(compareTransactionsNewestFirst);
   if (!rows.length)
     return (
       <Empty
@@ -331,7 +330,8 @@ export function TransactionRows({
                 {new Intl.DateTimeFormat("tr-TR", {
                   day: "numeric",
                   month: "short",
-                }).format(new Date(`${t.date}T12:00:00`))}
+                }).format(new Date(`${t.date}T12:00:00`))}{" "}
+                · {t.time || "Saat belirtilmedi"}
               </Txt>
             </View>
             <View style={{ alignItems: "flex-end", maxWidth: 160 }}>

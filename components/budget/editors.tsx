@@ -13,6 +13,8 @@ import {
   parseAmount,
   today,
   validDate,
+  validTime,
+  localTime,
 } from "@/lib/budget/model";
 import {
   DEFAULT_TRACKED_CURRENCIES,
@@ -49,6 +51,9 @@ export function TransactionEditor({
       : "",
   );
   const [date, setDate] = useState(initial?.date || today());
+  const [time, setTime] = useState(
+    initial?.time ?? (transaction ? "" : localTime()),
+  );
   const [description, setDescription] = useState(initial?.description || "");
   const [categoryId, setCategoryId] = useState(
     initial?.categoryId ||
@@ -122,6 +127,10 @@ export function TransactionEditor({
       setError("Geçerli bir tarih gir. Biçim: YYYY-MM-DD");
       return;
     }
+    if (time.trim() && !validTime(time.trim()))
+      return setError(
+        "Geçerli bir saat gir. Biçim: SS:DD (00:00–23:59). Saati bilmiyorsan boş bırak.",
+      );
     if ((currency !== "TRY" || initial?.planId) && date > today()) {
       setError("Döviz kuru gelecekteki bir işlem tarihi için kullanılamaz.");
       return;
@@ -192,6 +201,7 @@ export function TransactionEditor({
         type,
         amount: value,
         date,
+        time: time.trim() || undefined,
         categoryId,
         description: description.trim(),
         currency,
@@ -551,6 +561,21 @@ export function TransactionEditor({
         autoCapitalize="none"
       />
       <Field
+        label="Saat · SS:DD"
+        value={time}
+        onChangeText={setTime}
+        placeholder="14:30"
+        maxLength={5}
+        autoCapitalize="none"
+        autoCorrect={false}
+      />
+      <Txt
+        style={{ color: C.dim, fontSize: 11, marginTop: -10, marginBottom: 18 }}
+      >
+        24 saat biçimi, cihazının yerel saati. Saati bilinmeyen kayıtlar boş
+        bırakılabilir.
+      </Txt>
+      <Field
         label="Açıklama (isteğe bağlı)"
         value={description}
         onChangeText={setDescription}
@@ -884,7 +909,9 @@ export function ImportEditor({
               {result.categories.find((c) => c.id === t.categoryId)?.name}
             </Txt>
             <Txt style={{ fontSize: 12, color: C.muted }}>
-              {t.date} · {t.type === "income" ? "Gelir" : "Gider"}
+              {t.date}
+              {t.time ? ` ${t.time}` : ""} ·{" "}
+              {t.type === "income" ? "Gelir" : "Gider"}
             </Txt>
           </View>
           <View style={{ alignItems: "flex-end" }}>

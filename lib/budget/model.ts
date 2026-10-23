@@ -20,6 +20,7 @@ export type Transaction = {
   amount: number;
   date: string;
   description: string;
+  time?: string;
   accountId?: string;
   planId?: string;
   planIndex?: number;
@@ -175,6 +176,19 @@ export const monthLabel = (month: string, short = false) => {
     ...(short ? {} : { year: "numeric" }),
   }).format(new Date(y, m - 1, 1));
 };
+/** Local wall-clock time accompanies the user's chosen calendar date. */
+export const localTime = (date = new Date()) =>
+  `${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+export const validTime = (value: unknown): value is string =>
+  typeof value === "string" && /^([01]\d|2[0-3]):[0-5]\d$/.test(value);
+/** Unknown times follow known times on the same day; ties retain a stable ID order. */
+export const compareTransactionsNewestFirst = (
+  a: Transaction,
+  b: Transaction,
+) =>
+  b.date.localeCompare(a.date) ||
+  (b.time ?? "").localeCompare(a.time ?? "") ||
+  b.id.localeCompare(a.id);
 export const validDate = (date: string) => {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return false;
   const d = new Date(`${date}T12:00:00Z`);
@@ -447,6 +461,7 @@ export function validateData(value: unknown): value is BudgetData {
             t.fxDate! <= t.date &&
             t.fxSide === (t.type === "income" ? "buying" : "selling"))) &&
         validDate(t.date) &&
+        (t.time === undefined || validTime(t.time)) &&
         v.categories.some((c) => c.id === t.categoryId && c.type === t.type),
     )
   )
