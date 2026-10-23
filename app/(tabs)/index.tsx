@@ -1,3 +1,4 @@
+import { CategoryManager } from "@/components/budget/categories";
 import React, { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -93,6 +94,7 @@ type Dialog =
   | { kind: "plan" }
   | { kind: "budget"; category: Category }
   | { kind: "category" }
+  | { kind: "categories" }
   | { kind: "import"; text: string; result: ImportResult }
   | { kind: "delete"; transaction: Transaction }
   | { kind: "fresh" }
@@ -184,7 +186,12 @@ export default function BudgetApp() {
   const [confirmError, setConfirmError] = useState("");
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<"all" | TransactionType>("all");
-  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [selectedCategoryFilter, setCategoryFilter] = useState("all");
+  const categoryFilter = data.categories.some(
+    (c) => c.id === selectedCategoryFilter,
+  )
+    ? selectedCategoryFilter
+    : "all";
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scroll = useRef<ScrollView>(null);
   const s = summarize(data, month);
@@ -849,6 +856,15 @@ export default function BudgetApp() {
             {page === "transactions" ? (
               <>
                 <Metrics data={data} month={month} mobile={mobile} />
+                <Button
+                  small
+                  kind="secondary"
+                  icon="settings"
+                  style={{ alignSelf: "flex-start" }}
+                  onPress={() => setDialog({ kind: "categories" })}
+                >
+                  Kategorileri yönet
+                </Button>
                 <Card style={{ padding: mobile ? 16 : 22 }}>
                   <View
                     style={{
@@ -1200,6 +1216,15 @@ export default function BudgetApp() {
                       Yeni kategori
                     </Button>
                   </View>
+                  <Button
+                    small
+                    kind="secondary"
+                    icon="settings"
+                    style={{ marginBottom: 16 }}
+                    onPress={() => setDialog({ kind: "categories" })}
+                  >
+                    Kategorileri yönet
+                  </Button>
                   <Txt style={[styles.label, { marginBottom: 12 }]}>
                     GİDER KATEGORİLERİ
                   </Txt>
@@ -1358,6 +1383,9 @@ export default function BudgetApp() {
           onClose={close}
           onDone={notify}
         />
+      ) : null}
+      {dialog?.kind === "categories" ? (
+        <CategoryManager onClose={close} onDone={notify} />
       ) : null}
       {dialog?.kind === "category" ? (
         <CategoryEditor onClose={close} onDone={notify} />
