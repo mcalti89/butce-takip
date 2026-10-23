@@ -52,6 +52,7 @@ function normalizeQuote(value: Record<string, unknown>): FxQuote {
   return {
     date,
     currency: currency as FxCurrencyCode,
+    ...(currency === "OMR" ? { rateSource: "TCMB_USD_OMR_PEG" as const } : {}),
     currencyName: String(value.currency_name || value.currencyName || currency),
     unit,
     forexBuying: nullableNumber(value.forex_buying ?? value.forexBuying),

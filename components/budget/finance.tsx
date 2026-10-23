@@ -1,3 +1,4 @@
+import { currencyScale } from "@/lib/budget/currency";
 import React, { useState } from "react";
 import { View } from "react-native";
 import { useBudget } from "@/lib/budget/store";
@@ -72,11 +73,11 @@ function Caption({ children }: { children: React.ReactNode }) {
     </Txt>
   );
 }
-function balanceInput(s: string) {
+function balanceInput(s: string, currency: string) {
   const negative = s.trim().startsWith("-");
   const value = s.trim().replace(/^[-+]/, "");
-  if (/^0([.,]0{1,2})?$/.test(value)) return 0;
-  const n = parseAmount(value);
+  if (/^0([.,]0{1,3})?$/.test(value)) return 0;
+  const n = parseAmount(value, currency);
   return negative ? -n : n;
 }
 export function AccountEditor({
@@ -118,8 +119,8 @@ export function AccountEditor({
       (data.paymentPlans ?? []).some((p) => p.accountId === account.id));
   async function save() {
     setError("");
-    const n = balanceInput(opening),
-      l = parseAmount(limit),
+    const n = balanceInput(opening, currency),
+      l = parseAmount(limit, currency),
       sd = Number(closing),
       pd = Number(payment);
     if (
@@ -201,6 +202,7 @@ export function AccountEditor({
             "USD",
             "EUR",
             "GBP",
+            "OMR",
             ...(data.trackedCurrencies ?? []),
             currency,
           ]),
@@ -314,7 +316,7 @@ export function TransferEditor({
   const [error, setError] = useState("");
   const source = accounts.find((a) => a.id === from);
   async function save() {
-    const n = parseAmount(value);
+    const n = parseAmount(value, source?.currency);
     setError("");
     if (!Number.isFinite(n) || !validDate(date) || date > today())
       return setError(
@@ -435,7 +437,7 @@ export function PlanEditor({
   );
   const categories = data.categories.filter((c) => c.type === type);
   async function save() {
-    const n = parseAmount(amount),
+    const n = parseAmount(amount, currency),
       parts = Number(count);
     setError("");
     if (
@@ -452,7 +454,7 @@ export function PlanEditor({
         !Number.isInteger(parts) ||
         parts < 2 ||
         parts > 120 ||
-        Math.round(n * 100) < parts)
+        Math.round(n * currencyScale(currency)) < parts)
     )
       return setError(
         "Taksit için bir kart ve 2–120 arasında geçerli taksit sayısı seç.",
@@ -556,6 +558,7 @@ export function PlanEditor({
             "USD",
             "EUR",
             "GBP",
+            "OMR",
             ...(data.trackedCurrencies ?? []),
           ]),
         ].map((c) => (

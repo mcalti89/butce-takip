@@ -10,9 +10,10 @@ import {
 } from "@/lib/budget/model";
 import {
   CURRENCY_NAMES,
+  rateSourceLabel,
   DEFAULT_TRACKED_CURRENCIES,
   FxCurrencyCode,
-  TCMB_CURRENCY_CODES,
+  SUPPORTED_CURRENCY_CODES,
 } from "@/lib/budget/fx";
 import {
   fetchFxHistory,
@@ -177,7 +178,7 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
             />
             <View style={{ flex: 1 }}>
               <Txt bold style={styles.sectionTitle}>
-                TCMB günlük kur arşivi
+                Günlük kur arşivi
               </Txt>
               <Txt
                 style={{
@@ -205,6 +206,12 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
             Kurları güncelle
           </Button>
         </View>
+        <Txt style={{ color: C.muted, fontSize: 12, marginTop: 14 }}>
+          OMR (Umman riyali) TCMB tarafından doğrudan yayımlanmaz. OMR/TRY
+          gösterge kuru, arşivdeki USD/TRY kuru ve 1 USD = 0,3845 OMR sabit
+          paritesiyle hesaplanır. Kaynak USD bülteniyle aynı tarih kullanılır;
+          gerçek banka/kart kuru değildir.
+        </Txt>
         {!configured ? (
           <View
             style={{
@@ -281,7 +288,7 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
           Seçim hesabında saklanır. Alış ve satış kurları ayrı gösterilir.
         </Txt>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          {TCMB_CURRENCY_CODES.map((code) => {
+          {SUPPORTED_CURRENCY_CODES.map((code) => {
             const active = selected.includes(code);
             return (
               <Pressable
@@ -385,7 +392,7 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
                   </Txt>
                 </View>
                 <Txt style={{ color: C.dim, fontSize: 9, marginTop: 10 }}>
-                  Bülten {quote.bulletinNo}
+                  {rateSourceLabel(quote.currency)} · Bülten {quote.bulletinNo}
                 </Txt>
               </Card>
             ))}
@@ -492,8 +499,8 @@ export function FxDashboard({ mobile }: { mobile: boolean }) {
             style={{ color: "#B2C9E7", flex: 1, fontSize: 11, lineHeight: 18 }}
           >
             TRY dışı gelirler döviz alış, giderler döviz satış kuru üzerinden
-            TRY raporuna çevrilir. TCMB gösterge kuru, banka makbuzundaki gerçek
-            kur değildir. Kur ve bülten tarihi işlem kaydında sabitlenir; eski
+            TRY raporuna çevrilir. Gösterge kur, banka makbuzundaki gerçek kur
+            değildir. Kur ve bülten tarihi işlem kaydında sabitlenir; eski
             işlemler kur güncellemesiyle değişmez.
           </Txt>
         </View>

@@ -6,7 +6,7 @@ import {
 } from "mysql2/promise";
 import type { Bulletin } from "./tcmb";
 import { initialArchiveDate, istanbulDate, shiftDay } from "./tcmb";
-import type { FxQuote } from "../../lib/budget/fx";
+import { omrFromUsd, type FxQuote } from "../../lib/budget/fx";
 
 const fields = `r.rate_date,r.currency_code,r.currency_name,r.unit,r.forex_buying,r.forex_selling,
   r.banknote_buying,r.banknote_selling,b.bulletin_no,b.fetched_at_ms`;
@@ -126,25 +126,43 @@ export class FxRepository {
     );
     const date: string | null = dates[0].date;
     if (!date) return { date: null, rates: [] as FxQuote[] };
+    const queryCodes = codes.includes("OMR")
+      ? [...new Set([...codes.filter((c) => c !== "OMR"), "USD"])]
+      : codes;
     const [rows] = await this.pool.execute<RowDataPacket[]>(
-      `SELECT ${fields}${from}WHERE r.rate_date=? ${codes.length ? `AND r.currency_code IN (${codes.map(() => "?").join(",")})` : ""} ORDER BY r.currency_code`,
-      [date, ...codes],
+      `SELECT ${fields}${from}WHERE r.rate_date=? ${queryCodes.length ? `AND r.currency_code IN (${queryCodes.map(() => "?").join(",")})` : ""} ORDER BY r.currency_code`,
+      [date, ...queryCodes],
     );
-    return { date, rates: rows.map(quote) };
+    const rates = rows.map(quote);
+    const usd = rates.find((q) => q.currency === "USD");
+    if (usd && (!codes.length || codes.includes("OMR")))
+      rates.push(omrFromUsd(usd));
+    return {
+      date,
+      rates: rates
+        .filter((q) => !codes.length || codes.includes(q.currency))
+        .sort((a, b) => a.currency.localeCompare(b.currency)),
+    };
   }
   async history(currency: string, start: string, end: string) {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       `SELECT ${fields}${from}WHERE r.currency_code=? AND r.rate_date BETWEEN ? AND ? ORDER BY r.rate_date DESC LIMIT 400`,
-      [currency, start, end],
+      [currency === "OMR" ? "USD" : currency, start, end],
     );
-    return rows.map(quote);
+    return rows.map((row) =>
+      currency === "OMR" ? omrFromUsd(quote(row)) : quote(row),
+    );
   }
   async rate(currency: string, date: string) {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       `SELECT ${fields}${from}WHERE r.currency_code=? AND r.rate_date<=? AND r.forex_buying>0 AND r.forex_selling>0 ORDER BY r.rate_date DESC LIMIT 1`,
-      [currency, date],
+      [currency === "OMR" ? "USD" : currency, date],
     );
-    return rows[0] ? quote(rows[0]) : null;
+    return rows[0]
+      ? currency === "OMR"
+        ? omrFromUsd(quote(rows[0]))
+        : quote(rows[0])
+      : null;
   }
   async status() {
     const [rows] = await this.pool.query<RowDataPacket[]>(

@@ -1,5 +1,6 @@
+import { currencyScale, minorUnits } from "./currency";
 import type { BudgetData, Transaction } from "./model";
-import { TCMB_CURRENCY_CODES } from "./fx";
+import { SUPPORTED_CURRENCY_CODES } from "./fx";
 export type FinancialAccount = {
   id: string;
   name: string;
@@ -42,24 +43,24 @@ export type PaymentOccurrence = {
   amount: number;
   transaction?: Transaction;
 };
-const cents = (n: number) => Math.round(n * 100);
+const cents = minorUnits;
 const dateValid = (s: unknown): s is string =>
   typeof s === "string" &&
   /^\d{4}-\d{2}-\d{2}$/.test(s) &&
   Number.isFinite(Date.parse(s + "T00:00:00Z")) &&
   new Date(s + "T00:00:00Z").toISOString().slice(0, 10) === s;
-const moneyValid = (n: unknown, zero = false): n is number =>
+const moneyValid = (n: unknown, zero = false, currency = "TRY"): n is number =>
   typeof n === "number" &&
   Number.isFinite(n) &&
   Math.abs(n) <= 999999999 &&
   (zero || n > 0) &&
-  Math.abs(n * 100 - cents(n)) < 0.0001;
+  Math.abs(n * currencyScale(currency) - cents(n, currency)) < 0.0001;
 const identifier = (s: unknown): s is string =>
   typeof s === "string" && /^[a-zA-Z0-9][a-zA-Z0-9_-]{0,190}$/.test(s);
 const currencyValid = (s: unknown): s is string =>
   s === "TRY" ||
   (typeof s === "string" &&
-    (TCMB_CURRENCY_CODES as readonly string[]).includes(s));
+    (SUPPORTED_CURRENCY_CODES as readonly string[]).includes(s));
 function unique(rows: { id: string }[]) {
   return (
     rows.every((r) => r && identifier(r.id)) &&
@@ -81,10 +82,15 @@ export function monthlyDate(
   d.setUTCDate(Math.min(day, last));
   return d.toISOString().slice(0, 10);
 }
-export function installmentAmount(total: number, count: number, index: number) {
-  const all = cents(total),
+export function installmentAmount(
+  total: number,
+  count: number,
+  index: number,
+  currency = "TRY",
+) {
+  const all = cents(total, currency),
     each = Math.floor(all / count);
-  return (each + (index < all % count ? 1 : 0)) / 100;
+  return (each + (index < all % count ? 1 : 0)) / currencyScale(currency);
 }
 export function occurrenceDate(plan: PaymentPlan, index: number) {
   return plan.kind === "once"
@@ -93,7 +99,7 @@ export function occurrenceDate(plan: PaymentPlan, index: number) {
 }
 export function occurrenceAmount(plan: PaymentPlan, index: number) {
   return plan.kind === "installment"
-    ? installmentAmount(plan.amount, plan.count!, index)
+    ? installmentAmount(plan.amount, plan.count!, index, plan.currency)
     : plan.amount;
 }
 export function paymentOccurrences(
@@ -148,16 +154,17 @@ export function accountBalance(
   asOf: string,
 ) {
   if (asOf < account.openingDate) return 0;
-  let n = cents(account.openingBalance);
+  const currency = account.currency;
+  let n = cents(account.openingBalance, currency);
   for (const t of data.transactions)
     if (t.accountId === account.id && t.date <= asOf)
-      n += (t.type === "income" ? 1 : -1) * cents(t.amount);
+      n += (t.type === "income" ? 1 : -1) * cents(t.amount, currency);
   for (const t of data.accountTransfers ?? [])
     if (t.date <= asOf) {
-      if (t.fromId === account.id) n -= cents(t.amount);
-      if (t.toId === account.id) n += cents(t.amount);
+      if (t.fromId === account.id) n -= cents(t.amount, currency);
+      if (t.toId === account.id) n += cents(t.amount, currency);
     }
-  return n / 100;
+  return n / currencyScale(currency);
 }
 export function pendingInstallments(data: BudgetData, accountId: string) {
   const paid = new Set(
@@ -165,12 +172,15 @@ export function pendingInstallments(data: BudgetData, accountId: string) {
       .filter((t) => t.planId !== undefined)
       .map((t) => `${t.planId}:${t.planIndex}`),
   );
+  const currency =
+    data.financialAccounts?.find((a) => a.id === accountId)?.currency ?? "TRY";
   let total = 0;
   for (const p of data.paymentPlans ?? [])
     if (!p.archived && p.kind === "installment" && p.accountId === accountId)
       for (let i = 0; i < p.count!; i++)
-        if (!paid.has(`${p.id}:${i}`)) total += cents(occurrenceAmount(p, i));
-  return total / 100;
+        if (!paid.has(`${p.id}:${i}`))
+          total += cents(occurrenceAmount(p, i), currency);
+  return total / currencyScale(currency);
 }
 export function cardDates(account: FinancialAccount, from: string) {
   const anchor = from.slice(0, 7) + "-01";
@@ -328,14 +338,14 @@ export function validFinanceData(data: BudgetData) {
       !a.name.trim() ||
       a.name.length > 80 ||
       !currencyValid(a.currency) ||
-      !moneyValid(a.openingBalance, true) ||
+      !moneyValid(a.openingBalance, true, a.currency) ||
       !dateValid(a.openingDate) ||
       typeof a.archived !== "boolean"
     )
       return false;
     if (
       a.kind === "card" &&
-      (!moneyValid(a.creditLimit) ||
+      (!moneyValid(a.creditLimit, false, a.currency) ||
         !Number.isInteger(a.statementDay) ||
         a.statementDay! < 1 ||
         a.statementDay! > 31 ||
@@ -354,7 +364,7 @@ export function validFinanceData(data: BudgetData) {
       f.id === to.id ||
       f.currency !== to.currency ||
       t.currency !== f.currency ||
-      !moneyValid(t.amount) ||
+      !moneyValid(t.amount, false, t.currency ?? "TRY") ||
       !dateValid(t.date) ||
       t.date < f.openingDate ||
       t.date < to.openingDate ||
@@ -372,7 +382,7 @@ export function validFinanceData(data: BudgetData) {
       !["once", "monthly", "installment"].includes(p.kind) ||
       !["income", "expense"].includes(p.type) ||
       !currencyValid(p.currency) ||
-      !moneyValid(p.amount) ||
+      !moneyValid(p.amount, false, p.currency) ||
       !dateValid(p.startDate) ||
       typeof p.archived !== "boolean" ||
       !data.categories.some(
@@ -400,7 +410,7 @@ export function validFinanceData(data: BudgetData) {
         !Number.isInteger(p.count) ||
         p.count! < 2 ||
         p.count! > 120 ||
-        cents(p.amount) < p.count!)
+        cents(p.amount, p.currency) < p.count!)
     )
       return false;
   }
@@ -412,7 +422,7 @@ export function validFinanceData(data: BudgetData) {
         !a ||
         a.currency !== (t.currency ?? "TRY") ||
         t.date < a.openingDate ||
-        !moneyValid(t.amount)
+        !moneyValid(t.amount, false, t.currency ?? "TRY")
       )
         return false;
     }

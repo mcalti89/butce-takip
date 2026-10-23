@@ -1,3 +1,4 @@
+import { currencyScale, minorUnits } from "./currency";
 import { type BudgetData, type Transaction, shiftMonth } from "./model";
 import { accountBalance, paymentOccurrences } from "./finance";
 
@@ -249,6 +250,8 @@ export function nextMonthForecast(
       a.date.localeCompare(b.date) || a.title.localeCompare(b.title, "tr"),
   );
   const rows = [...currencies].sort().map((currency) => {
+    const scale = currencyScale(currency);
+    const cents = (value: number) => minorUnits(value, currency);
     const own = accounts.filter((a) => a.currency === currency);
     const cash = own
       .filter((a) => a.kind !== "card")
@@ -264,7 +267,7 @@ export function nextMonthForecast(
       low = start,
       lowDate = asOf,
       nextOpening = 0;
-    const daily = [{ date: asOf, balance: start / 100 }];
+    const daily = [{ date: asOf, balance: start / scale }];
     const relevant = events.filter((e) => e.currency === currency);
     const dates = [...new Set(relevant.map((e) => e.date))];
     for (const date of dates) {
@@ -277,25 +280,25 @@ export function nextMonthForecast(
         else if (e.type === "expense") expense += cents(e.amount);
         else nextOpening += signed;
       }
-      daily.push({ date, balance: running / 100 });
+      daily.push({ date, balance: running / scale });
       if (running < low) {
         low = running;
         lowDate = date;
       }
     }
     if (daily[daily.length - 1].date !== end)
-      daily.push({ date: end, balance: running / 100 });
+      daily.push({ date: end, balance: running / scale });
     return {
       currency,
-      cash: cash / 100,
-      cards: cards / 100,
-      current: start / 100,
-      thisMonthEnd: thisEnd / 100,
-      income: income / 100,
-      expense: expense / 100,
-      openingAdjustments: nextOpening / 100,
-      nextMonthEnd: running / 100,
-      lowest: low / 100,
+      cash: cash / scale,
+      cards: cards / scale,
+      current: start / scale,
+      thisMonthEnd: thisEnd / scale,
+      income: income / scale,
+      expense: expense / scale,
+      openingAdjustments: nextOpening / scale,
+      nextMonthEnd: running / scale,
+      lowest: low / scale,
       lowestDate: lowDate,
       daily,
       unassignedPlans: relevant.filter((e) => !e.accountId).length,
@@ -304,13 +307,13 @@ export function nextMonthForecast(
           .filter(
             (o) => o.plan.currency === currency && o.plan.type === "income",
           )
-          .reduce((n, o) => n + cents(o.amount), 0) / 100,
+          .reduce((n, o) => n + cents(o.amount), 0) / scale,
       overdueExpense:
         overdue
           .filter(
             (o) => o.plan.currency === currency && o.plan.type === "expense",
           )
-          .reduce((n, o) => n + cents(o.amount), 0) / 100,
+          .reduce((n, o) => n + cents(o.amount), 0) / scale,
     };
   });
   return {

@@ -1,3 +1,4 @@
+import { currencyDigits } from "./currency";
 import {
   BudgetData,
   Category,
@@ -8,7 +9,7 @@ import {
   parseAmount,
   validDate,
 } from "./model";
-import { parseFxNumber, TCMB_CURRENCY_CODES } from "./fx";
+import { parseFxNumber, SUPPORTED_CURRENCY_CODES } from "./fx";
 export type ImportResult = {
   transactions: Transaction[];
   categories: Category[];
@@ -134,8 +135,8 @@ export function importCSV(text: string, data: BudgetData): ImportResult {
       : ["expense", "gider"].includes(rawType)
         ? "expense"
         : undefined;
-    const amount = parseAmount(row[col.amount] || "");
     const currency = (row[col.currency] || "TRY").trim().toUpperCase();
+    const amount = parseAmount(row[col.amount] || "", currency);
     const baseAmount =
       col.baseAmount < 0 ? null : parseFxNumber(row[col.baseAmount] || "");
     const fxRate = col.fxRate < 0 ? null : parseFxNumber(row[col.fxRate] || "");
@@ -153,8 +154,8 @@ export function importCSV(text: string, data: BudgetData): ImportResult {
       description.length > 300 ||
       !/^[A-Z]{3}$/.test(currency) ||
       (currency !== "TRY" &&
-        (!TCMB_CURRENCY_CODES.includes(
-          currency as (typeof TCMB_CURRENCY_CODES)[number],
+        (!SUPPORTED_CURRENCY_CODES.includes(
+          currency as (typeof SUPPORTED_CURRENCY_CODES)[number],
         ) ||
           baseAmount === null ||
           baseAmount < 0 ||
@@ -252,7 +253,7 @@ export function exportCSV(data: BudgetData): string {
           t.date,
           t.type,
           data.categories.find((c) => c.id === t.categoryId)?.name || "Diğer",
-          t.amount.toFixed(2),
+          t.amount.toFixed(currencyDigits(t.currency)),
           t.description,
           t.currency || "TRY",
           t.currency && t.currency !== "TRY"

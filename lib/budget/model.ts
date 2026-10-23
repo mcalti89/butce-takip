@@ -1,3 +1,4 @@
+import { currencyDigits, currencyScale } from "./currency";
 import {
   validFinanceData,
   type FinancialAccount,
@@ -39,6 +40,7 @@ export type FxRateSnapshot = {
   banknoteBuying: number | null;
   banknoteSelling: number | null;
   bulletinNo: string;
+  rateSource?: "TCMB_USD_OMR_PEG";
   fetchedAtUtc?: string;
 };
 export type BudgetData = {
@@ -148,7 +150,8 @@ export const moneyIn = (value: number, currency: string, compact = false) => {
     return new Intl.NumberFormat("tr-TR", {
       style: "currency",
       currency,
-      maximumFractionDigits: compact && Number.isInteger(value) ? 0 : 2,
+      maximumFractionDigits:
+        compact && Number.isInteger(value) ? 0 : currencyDigits(currency),
       minimumFractionDigits: 0,
     }).format(value);
   } catch {
@@ -177,7 +180,7 @@ export const validDate = (date: string) => {
   const d = new Date(`${date}T12:00:00Z`);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === date;
 };
-export function parseAmount(input: string): number {
+export function parseAmount(input: string, currency = "TRY"): number {
   let v = input.trim().replace(/\s|₺|TRY/gi, "");
   if (v.includes(",") && v.includes("."))
     v =
@@ -185,10 +188,11 @@ export function parseAmount(input: string): number {
         ? v.replace(/\./g, "").replace(",", ".")
         : v.replace(/,/g, "");
   else if (v.includes(",")) v = v.replace(",", ".");
-  if (!/^\d+(\.\d{1,2})?$/.test(v)) return NaN;
+  if (!new RegExp(`^\\d+(\\.\\d{1,${currencyDigits(currency)}})?$`).test(v))
+    return NaN;
   const n = Number(v);
   return Number.isFinite(n) && n > 0 && n <= 999999999
-    ? Math.round(n * 100) / 100
+    ? Math.round(n * currencyScale(currency)) / currencyScale(currency)
     : NaN;
 }
 export function emptyData(): BudgetData {
@@ -201,7 +205,7 @@ export function emptyData(): BudgetData {
     transactions: [],
     budgets: {},
     savingsGoals: {},
-    trackedCurrencies: ["USD", "EUR", "GBP"],
+    trackedCurrencies: ["USD", "EUR", "GBP", "OMR"],
     fxRates: [],
     demo: false,
   };
@@ -423,6 +427,8 @@ export function validateData(value: unknown): value is BudgetData {
         typeof t.amount === "number" &&
         Number.isFinite(t.amount) &&
         t.amount > 0 &&
+        (t.currency !== "OMR" ||
+          Math.abs(t.amount * 1000 - Math.round(t.amount * 1000)) < 0.0001) &&
         (t.currency === undefined || /^[A-Z]{3}$/.test(t.currency)) &&
         (t.baseAmount === undefined ||
           (typeof t.baseAmount === "number" &&

@@ -1,4 +1,5 @@
 import type { FxRateSnapshot } from "./model";
+import { currencyDigits } from "./currency";
 
 export const TCMB_CURRENCY_CODES = [
   "USD",
@@ -25,14 +26,44 @@ export const TCMB_CURRENCY_CODES = [
   "XDR",
 ] as const;
 
-export type FxCurrencyCode = (typeof TCMB_CURRENCY_CODES)[number];
+export const SUPPORTED_CURRENCY_CODES = [
+  ...TCMB_CURRENCY_CODES,
+  "OMR",
+] as const;
+export type FxCurrencyCode = (typeof SUPPORTED_CURRENCY_CODES)[number];
+// Central Bank of Oman fixed parity: 1 USD = 0.3845 OMR (since 1986).
+export const OMR_PER_USD = 0.3845;
+export const OMR_PARITY_SOURCE = "https://cbo.gov.om/Pages/MonetaryPolicy.aspx";
+export const rateSourceLabel = (currency: string) =>
+  currency === "OMR" ? "TCMB USD + sabit OMR paritesi (hesaplanmış)" : "TCMB";
+export function omrFromUsd(usd: FxQuote): FxQuote {
+  if (usd.currency !== "USD")
+    throw new Error("OMR requires an archived USD quote");
+  const cross = (rate: number | null) =>
+    rate === null
+      ? null
+      : Math.round((rate / usd.unit / OMR_PER_USD) * 1e8) / 1e8;
+  return {
+    ...usd,
+    currency: "OMR",
+    rateSource: "TCMB_USD_OMR_PEG",
+    currencyName: "Umman riyali",
+    unit: 1,
+    forexBuying: cross(usd.forexBuying),
+    forexSelling: cross(usd.forexSelling),
+    banknoteBuying: null,
+    banknoteSelling: null,
+  };
+}
 export const DEFAULT_TRACKED_CURRENCIES: FxCurrencyCode[] = [
   "USD",
   "EUR",
   "GBP",
+  "OMR",
 ];
 export const CURRENCY_NAMES: Record<FxCurrencyCode | "TRY", string> = {
   TRY: "Türk lirası",
+  OMR: "Umman riyali",
   USD: "ABD doları",
   AUD: "Avustralya doları",
   DKK: "Danimarka kronu",
@@ -113,7 +144,8 @@ export function formatMoney(value: number, currency: string, compact = false) {
     return new Intl.NumberFormat("tr-TR", {
       style: "currency",
       currency,
-      maximumFractionDigits: compact && Number.isInteger(value) ? 0 : 2,
+      maximumFractionDigits:
+        compact && Number.isInteger(value) ? 0 : currencyDigits(currency),
       minimumFractionDigits: 0,
     }).format(value);
   } catch {

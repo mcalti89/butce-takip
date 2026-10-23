@@ -19,14 +19,12 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL TCMB arşivi ve API", () => {
   const secret = "test-only-cron-secret-32-characters-long";
   const b = (d = "2026-10-21") =>
     parseBulletin(tcmbFixture(d), tcmbUrl(d), Date.now(), d);
-  const noop = vi
-    .fn()
-    .mockResolvedValue({
-      skipped: true,
-      archived: 0,
-      checked: 0,
-      latestDate: null,
-    });
+  const noop = vi.fn().mockResolvedValue({
+    skipped: true,
+    archived: 0,
+    checked: 0,
+    latestDate: null,
+  });
   beforeAll(async () => {
     const url = new URL(databaseUrl!);
     if (
@@ -97,6 +95,40 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL TCMB arşivi ve API", () => {
     expect((await repo.rate("USD", "2026-10-22"))?.date).toBe("2026-10-21");
     expect((await repo.rate("USD", "2026-10-20"))?.date).toBe("2026-10-20");
     expect(await repo.rate("USD", "2026-10-19")).toBeNull();
+  });
+  it("OMR latest, historical and holiday quotes derive from archived USD without changing official XML", async () => {
+    const before = await repo.status();
+    const usd = await repo.rate("USD", "2026-10-22");
+    const result = await repo.latest(["OMR"]);
+    expect(result.rates).toHaveLength(1);
+    expect(result.rates[0].currency).toBe("OMR");
+    expect(result.rates[0].rateSource).toBe("TCMB_USD_OMR_PEG");
+    expect(result.rates[0].forexSelling).toBeCloseTo(
+      usd!.forexSelling! / 0.3845,
+      7,
+    );
+    expect((await repo.rate("OMR", "2026-10-22"))?.date).toBe("2026-10-21");
+    expect(await repo.rate("OMR", "2026-10-19")).toBeNull();
+    expect(
+      (await repo.history("OMR", "2026-10-01", "2026-10-22")).map(
+        (q) => q.currency,
+      ),
+    ).toEqual(["OMR", "OMR"]);
+    const response = await fetch(base + "/api/fx?action=latest&codes=OMR");
+    expect(response.status).toBe(200);
+    expect((await response.json()).rates[0].currency).toBe("OMR");
+    const history = await fetch(
+      base +
+        "/api/fx?action=history&currency=OMR&from=2026-10-01&to=2026-10-22",
+    );
+    expect(history.status).toBe(200);
+    expect((await history.json()).rates).toHaveLength(2);
+    const rate = await fetch(
+      base + "/api/fx?action=rate&currency=OMR&date=2026-10-22",
+    );
+    expect(rate.status).toBe(200);
+    expect((await rate.json()).rate.rateSource).toBe("TCMB_USD_OMR_PEG");
+    expect((await repo.status()).bulletinCount).toBe(before.bulletinCount);
   });
   it("ham XML, kaynak ve SHA-256 SQL arşivinde bulunur", async () => {
     const [rows] = await pool.query<any[]>(

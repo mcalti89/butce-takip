@@ -1,7 +1,7 @@
 import express from "express";
 import { timingSafeEqual } from "node:crypto";
 import { getBudgetRepository } from "../budget/mysql";
-import { TCMB_CURRENCY_CODES } from "../../lib/budget/fx";
+import { SUPPORTED_CURRENCY_CODES } from "../../lib/budget/fx";
 import { FxRepository } from "./repository";
 import { syncFx } from "./sync";
 import { istanbulDate, validDate } from "./tcmb";
@@ -47,13 +47,19 @@ export function createFxApp(
         typeof action !== "string")
     )
       return res.status(400).json({ error: "invalid_action" });
-    if (typeof codesInput !== "string" || codesInput.length > 90)
+    if (
+      typeof codesInput !== "string" ||
+      codesInput.length > SUPPORTED_CURRENCY_CODES.length * 4 - 1
+    )
       return res.status(400).json({ error: "invalid_currency_codes" });
     const codes = codesInput ? [...new Set(codesInput.split(","))] : [];
     const allowed = (s: unknown) =>
       typeof s === "string" &&
-      (TCMB_CURRENCY_CODES as readonly string[]).includes(s);
-    if (codes.length > 22 || codes.some((c) => !allowed(c)))
+      (SUPPORTED_CURRENCY_CODES as readonly string[]).includes(s);
+    if (
+      codes.length > SUPPORTED_CURRENCY_CODES.length ||
+      codes.some((c) => !allowed(c))
+    )
       return res.status(400).json({ error: "invalid_currency_codes" });
     const today = istanbulDate();
     if (

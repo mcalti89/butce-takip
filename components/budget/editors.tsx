@@ -1,3 +1,4 @@
+import { currencyDigits } from "@/lib/budget/currency";
 import React, { useEffect, useState } from "react";
 import { Pressable, View } from "react-native";
 import {
@@ -15,6 +16,7 @@ import {
 } from "@/lib/budget/model";
 import {
   DEFAULT_TRACKED_CURRENCIES,
+  rateSourceLabel,
   FxCurrencyCode,
   FxQuote,
   convertToTry,
@@ -67,7 +69,7 @@ export function TransactionEditor({
   const previewSide = type === "income" ? "buying" : "selling";
   const previewRate =
     type === "income" ? quotePreview?.forexBuying : quotePreview?.forexSelling;
-  const previewAmount = parseAmount(amount);
+  const previewAmount = parseAmount(amount, currency);
   const previewTry =
     quotePreview &&
     quotePreview.currency === currency &&
@@ -109,10 +111,10 @@ export function TransactionEditor({
     setCategoryId(data.categories.find((c) => c.type === next)?.id || "");
   };
   const save = async () => {
-    const value = parseAmount(amount);
+    const value = parseAmount(amount, currency);
     if (!Number.isFinite(value)) {
       setError(
-        "0’dan büyük, en fazla iki ondalıklı bir tutar gir. Örnek: 450,50",
+        `0’dan büyük, en fazla ${currencyDigits(currency)} ondalıklı bir tutar gir. Örnek: ${currency === "OMR" ? "2,750 OMR" : "450,50"}`,
       );
       return;
     }
@@ -302,7 +304,7 @@ export function TransactionEditor({
         label={`Tutar (${currency})`}
         value={amount}
         onChangeText={setAmount}
-        placeholder="0,00"
+        placeholder={currency === "OMR" ? "0,000" : "0,00"}
         keyboardType="decimal-pad"
         inputMode="decimal"
         maxLength={20}
@@ -329,6 +331,7 @@ export function TransactionEditor({
         {[
           ...new Set([
             "TRY",
+            "OMR",
             ...(data.trackedCurrencies ?? DEFAULT_TRACKED_CURRENCIES),
             currency,
           ]),
@@ -367,6 +370,13 @@ export function TransactionEditor({
           );
         })}
       </View>
+      {currency === "OMR" ? (
+        <Txt style={{ color: C.muted, fontSize: 12, marginBottom: 12 }}>
+          1 OMR = 1.000 baisa. Üç ondalık basamak kullanabilirsin. TL karşılığı
+          TCMB USD kuru / 0,3845 ile hesaplanır; banka veya kartının gerçek kuru
+          farklı olabilir.
+        </Txt>
+      ) : null}
       {currency !== "TRY" ? (
         <Txt
           style={{
@@ -398,7 +408,7 @@ export function TransactionEditor({
           }}
         >
           <Txt style={{ color: C.muted, fontSize: 10 }}>
-            TCMB {quotePreview.date} ·{" "}
+            {rateSourceLabel(currency)} {quotePreview.date} ·{" "}
             {type === "income" ? "döviz alış" : "döviz satış"} ·{" "}
             {quotePreview.unit} {currency} ={" "}
             {money(
