@@ -1,3 +1,5 @@
+import { EntryTypeSelector } from "./entry-type";
+import { compareDatedRecordsNewestFirst } from "@/lib/budget/time";
 import { AccountActivitySheet } from "./account-activity";
 import { currencyScale } from "@/lib/budget/currency";
 import React, { useState } from "react";
@@ -10,6 +12,9 @@ import {
   parseAmount,
   today,
   validDate,
+  validTime,
+  localTime,
+  type TransactionType,
 } from "@/lib/budget/model";
 import {
   accountBalance,
@@ -285,12 +290,16 @@ export function AccountEditor({
 }
 export function TransferEditor({
   transfer,
+  draft,
+  onTypeChange,
   toId,
   amount,
   onClose,
   onDone,
 }: {
   transfer?: AccountTransfer;
+  draft?: Partial<AccountTransfer>;
+  onTypeChange?: (type: TransactionType) => void;
   toId?: string;
   amount?: number;
   onClose: () => void;
@@ -300,6 +309,7 @@ export function TransferEditor({
   const accounts = (data.financialAccounts ?? []).filter((a) => !a.archived);
   const [from, setFrom] = useState(
     transfer?.fromId ??
+      draft?.fromId ??
       accounts.find(
         (a) =>
           a.id !== toId &&
@@ -309,10 +319,15 @@ export function TransferEditor({
       accounts.find((a) => a.id !== toId)?.id ??
       "",
   );
-  const [to, setTo] = useState(transfer?.toId ?? toId ?? "");
-  const [value, setValue] = useState(String(transfer?.amount ?? amount ?? ""));
-  const [date, setDate] = useState(transfer?.date ?? today());
-  const [note, setNote] = useState(transfer?.note ?? "");
+  const [to, setTo] = useState(transfer?.toId ?? draft?.toId ?? toId ?? "");
+  const [value, setValue] = useState(
+    String(transfer?.amount ?? draft?.amount ?? amount ?? ""),
+  );
+  const [date, setDate] = useState(transfer?.date ?? draft?.date ?? today());
+  const [time, setTime] = useState(
+    transfer?.time ?? (transfer ? "" : (draft?.time ?? localTime())),
+  );
+  const [note, setNote] = useState(transfer?.note ?? draft?.note ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const source = accounts.find((a) => a.id === from);
@@ -323,16 +338,20 @@ export function TransferEditor({
       return setError(
         "Pozitif tutar ve bugünü geçmeyen geçerli bir tarih gir.",
       );
+    if (time.trim() && !validTime(time.trim()))
+      return setError("Geçerli bir saat gir. Biçim: SS:DD (00:00–23:59).");
     setBusy(true);
     try {
       await update((d) =>
         saveTransfer(d, {
+          ...(transfer ?? {}),
           id: transfer?.id ?? id(),
           fromId: from,
           toId: to,
           amount: n,
           currency: source?.currency ?? "",
           date,
+          time: time.trim() || undefined,
           note: note.trim(),
         }),
       );
@@ -351,6 +370,14 @@ export function TransferEditor({
         if (!busy) onClose();
       }}
     >
+      {onTypeChange ? (
+        <EntryTypeSelector
+          value="transfer"
+          onChange={(type) => {
+            if (type !== "transfer") onTypeChange(type);
+          }}
+        />
+      ) : null}
       <Caption>
         Hesaplar arası aktarım ve kart borcu ödemesi burada kaydedilir. Bu
         hareketler gelir veya gider sayılmaz. İki hesap aynı para biriminde
@@ -399,6 +426,15 @@ export function TransferEditor({
         value={date}
         onChangeText={setDate}
         placeholder="YYYY-MM-DD"
+      />
+      <Field
+        label="Saat · SS:DD"
+        value={time}
+        onChangeText={setTime}
+        placeholder="14:30"
+        maxLength={5}
+        autoCapitalize="none"
+        autoCorrect={false}
       />
       <Field label="Not" value={note} onChangeText={setNote} maxLength={300} />
       <ErrorText message={error} />
@@ -950,7 +986,7 @@ export function AccountsDashboard({
               <Txt style={{ color: C.muted }}>Henüz transfer yok.</Txt>
             ) : (
               [...(data.accountTransfers ?? [])]
-                .sort((a, b) => b.date.localeCompare(a.date))
+                .sort(compareDatedRecordsNewestFirst)
                 .slice(0, 50)
                 .map((t) => (
                   <View
@@ -967,7 +1003,9 @@ export function AccountsDashboard({
                       {all.find((a) => a.id === t.toId)?.name}
                     </Txt>
                     <Txt style={{ color: C.muted, fontSize: 12 }}>
-                      {t.date} · {moneyIn(t.amount, t.currency)}
+                      {t.date}
+                      {t.time ? ` ${t.time}` : ""} ·{" "}
+                      {moneyIn(t.amount, t.currency)}
                       {t.note ? ` · ${t.note}` : ""}
                     </Txt>
                     <View style={{ flexDirection: "row", gap: 6 }}>

@@ -1,3 +1,4 @@
+import { compareDatedRecordsNewestFirst } from "./time";
 import type { BudgetData } from "./model";
 import { compareTransactionsNewestFirst } from "./model";
 import { minorUnits, currencyScale } from "./currency";
@@ -32,7 +33,7 @@ export function accountMonthActivity(
         t.date >= start &&
         t.date <= end,
     )
-    .sort((a, b) => b.date.localeCompare(a.date) || b.id.localeCompare(a.id));
+    .sort(compareDatedRecordsNewestFirst);
   const scale = currencyScale(account.currency),
     units = (n: number) => minorUnits(n, account.currency);
   const sum = (type: "income" | "expense") =>

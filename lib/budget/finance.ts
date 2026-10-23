@@ -1,3 +1,4 @@
+import { validTime } from "./time";
 import { currencyScale, minorUnits } from "./currency";
 import type { BudgetData, Transaction } from "./model";
 import { SUPPORTED_CURRENCY_CODES } from "./fx";
@@ -21,6 +22,7 @@ export type AccountTransfer = {
   currency: string;
   date: string;
   note: string;
+  time?: string;
 };
 export type PaymentPlan = {
   id: string;
@@ -366,6 +368,7 @@ export function validFinanceData(data: BudgetData) {
       t.currency !== f.currency ||
       !moneyValid(t.amount, false, t.currency ?? "TRY") ||
       !dateValid(t.date) ||
+      (t.time !== undefined && !validTime(t.time)) ||
       t.date < f.openingDate ||
       t.date < to.openingDate ||
       typeof t.note !== "string" ||

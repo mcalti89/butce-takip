@@ -1,3 +1,5 @@
+import { EntryTypeSelector } from "./entry-type";
+import { TransferEditor } from "./finance";
 import { CategoryManager } from "./categories";
 import { currencyDigits } from "@/lib/budget/currency";
 import React, { useEffect, useState } from "react";
@@ -71,6 +73,7 @@ export function TransactionEditor({
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
+  const [transferOpen, setTransferOpen] = useState(false);
   const categories = data.categories.filter((c) => c.type === type);
   const persistedCategoryId = transaction
     ? data.transactions.find((t) => t.id === transaction.id)?.categoryId
@@ -279,49 +282,20 @@ export function TransactionEditor({
   return (
     <>
       <Sheet
-        visible={!categoryManagerOpen}
+        visible={!categoryManagerOpen && !transferOpen}
         title={transaction ? "İşlemi düzenle" : "Yeni işlem"}
         subtitle="Küçük kayıtlar, büyük bir netlik."
         onClose={onClose}
       >
-        <View
-          style={{
-            flexDirection: "row",
-            backgroundColor: C.bg,
-            borderRadius: 11,
-            padding: 4,
-            gap: 4,
-            marginBottom: 22,
+        <EntryTypeSelector
+          value={type}
+          locked={!!initial?.planId}
+          disableTransfer={!!transaction}
+          onChange={(mode) => {
+            if (mode === "transfer") setTransferOpen(true);
+            else changeType(mode);
           }}
-        >
-          {(["expense", "income"] as TransactionType[]).map((t) => (
-            <Pressable
-              key={t}
-              accessibilityRole="button"
-              disabled={!!initial?.planId}
-              onPress={() => changeType(t)}
-              style={{
-                flex: 1,
-                flexDirection: "row",
-                justifyContent: "center",
-                alignItems: "center",
-                gap: 8,
-                padding: 12,
-                borderRadius: 8,
-                backgroundColor: type === t ? C.elevated : "transparent",
-              }}
-            >
-              <Icon
-                name={t === "expense" ? "arrow-up-right" : "arrow-down-left"}
-                color={type === t ? (t === "expense" ? C.red : C.green) : C.dim}
-                size={17}
-              />
-              <Txt bold style={{ color: type === t ? C.text : C.dim }}>
-                {t === "expense" ? "Gider" : "Gelir"}
-              </Txt>
-            </Pressable>
-          ))}
-        </View>
+        />
         <Field
           label={`Tutar (${currency})`}
           value={amount}
@@ -634,6 +608,30 @@ export function TransactionEditor({
           </Button>
         ) : null}
       </Sheet>
+      {transferOpen ? (
+        <TransferEditor
+          onClose={onClose}
+          onDone={onDone}
+          onTypeChange={(type) => {
+            changeType(type);
+            setTransferOpen(false);
+          }}
+          draft={{
+            fromId:
+              accountId ||
+              data.financialAccounts?.find(
+                (a) => !a.archived && a.currency === currency,
+              )?.id ||
+              "",
+            amount: Number.isFinite(parseAmount(amount, currency))
+              ? parseAmount(amount, currency)
+              : undefined,
+            date,
+            time,
+            note: description,
+          }}
+        />
+      ) : null}
       {categoryManagerOpen ? (
         <CategoryManager
           initialType={type}

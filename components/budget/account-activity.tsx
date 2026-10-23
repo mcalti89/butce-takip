@@ -226,7 +226,8 @@ export function AccountActivitySheet({
                 {format(t.amount)}
               </Txt>
               <Txt style={{ color: C.muted, fontSize: 12 }}>
-                {t.date} · {other?.name ?? "Diğer hesap"}
+                {t.date}
+                {t.time ? ` ${t.time}` : ""} · {other?.name ?? "Diğer hesap"}
                 {t.note ? ` · ${t.note}` : ""}
               </Txt>
             </View>

@@ -1,3 +1,5 @@
+import { activityRows } from "@/lib/budget/activity";
+import type { AccountTransfer, FinancialAccount } from "@/lib/budget/finance";
 import React from "react";
 import { Pressable, View } from "react-native";
 import {
@@ -8,7 +10,6 @@ import {
   money,
   moneyIn,
   summarize,
-  compareTransactionsNewestFirst,
 } from "@/lib/budget/model";
 import { C, Card, Empty, Icon, Progress, Txt, styles } from "./ui";
 export function Metrics({
@@ -267,31 +268,100 @@ export function InsightCards({
 }
 export function TransactionRows({
   transactions,
+  transfers = [],
+  accounts = [],
+  onTransferPress,
   categories,
   onPress,
   limit,
 }: {
   transactions: Transaction[];
+  transfers?: AccountTransfer[];
+  accounts?: FinancialAccount[];
+  onTransferPress?: (transfer: AccountTransfer) => void;
   categories: Category[];
   onPress: (t: Transaction) => void;
   limit?: number;
 }) {
-  const rows = [...transactions].sort(compareTransactionsNewestFirst);
+  const rows = activityRows(transactions, transfers);
   if (!rows.length)
     return (
       <Empty
         icon="repeat"
         title="Bu ay henüz işlem yok"
-        body="Yeni işlem ekle veya CSV dosyandan kayıtlarını içe aktar."
+        body="Gelir, gider veya transfer ekle; arama ve filtrelerini kontrol et."
       />
     );
   return (
     <View>
-      {rows.slice(0, limit || rows.length).map((t) => {
+      {rows.slice(0, limit || rows.length).map((entry) => {
+        if (entry.kind === "transfer") {
+          const t = entry.value;
+          const from =
+            accounts.find((a) => a.id === t.fromId)?.name ?? "Kaynak hesap";
+          const to =
+            accounts.find((a) => a.id === t.toId)?.name ?? "Hedef hesap";
+          return (
+            <Pressable
+              key={`transfer:${t.id}`}
+              onPress={() => onTransferPress?.(t)}
+              accessibilityRole="button"
+              accessibilityLabel={`Transfer ${from} → ${to} düzenle`}
+              style={({ pressed }) => ({
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 12,
+                paddingVertical: 14,
+                borderBottomWidth: 1,
+                borderBottomColor: C.border,
+                backgroundColor: pressed ? C.elevated : "transparent",
+              })}
+            >
+              <View
+                style={{
+                  width: 37,
+                  height: 37,
+                  borderRadius: 10,
+                  backgroundColor: "#60A5FA14",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <Icon name="repeat" size={17} color={C.blue} />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Txt bold numberOfLines={1} style={{ fontSize: 13 }}>
+                  {t.note || "Hesaplar arası transfer"}
+                </Txt>
+                <Txt style={{ color: C.muted, fontSize: 11 }}>
+                  {from} → {to}
+                </Txt>
+                <Txt style={{ color: C.dim, fontSize: 11 }}>
+                  {new Intl.DateTimeFormat("tr-TR", {
+                    day: "numeric",
+                    month: "short",
+                  }).format(new Date(`${t.date}T12:00:00`))}{" "}
+                  · {t.time ?? "Saat belirtilmedi"}
+                </Txt>
+              </View>
+              <View style={{ alignItems: "flex-end", maxWidth: 140 }}>
+                <Txt
+                  bold
+                  style={{ color: C.blue, fontSize: 13, textAlign: "right" }}
+                >
+                  {moneyIn(t.amount, t.currency)}
+                </Txt>
+                <Txt style={{ color: C.blue, fontSize: 10 }}>Transfer</Txt>
+              </View>
+              <Icon name="chevron-right" size={13} color={C.dim} />
+            </Pressable>
+          );
+        }
+        const t = entry.value;
         const c = categories.find((c) => c.id === t.categoryId);
         return (
           <Pressable
-            key={t.id}
+            key={`transaction:${t.id}`}
             onPress={() => onPress(t)}
             accessibilityRole="button"
             accessibilityLabel={`${t.description || c?.name} işlemini düzenle`}

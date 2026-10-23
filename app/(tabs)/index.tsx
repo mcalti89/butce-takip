@@ -1,3 +1,4 @@
+import { filterActivity, type ActivityFilter } from "@/lib/budget/activity";
 import { CategoryManager } from "@/components/budget/categories";
 import React, { useEffect, useRef, useState } from "react";
 import {
@@ -14,7 +15,6 @@ import { useBudget } from "@/lib/budget/store";
 import {
   Category,
   Transaction,
-  TransactionType,
   money,
   monthKey,
   monthLabel,
@@ -185,7 +185,7 @@ export default function BudgetApp() {
   const [confirmBusy, setConfirmBusy] = useState(false);
   const [confirmError, setConfirmError] = useState("");
   const [search, setSearch] = useState("");
-  const [filter, setFilter] = useState<"all" | TransactionType>("all");
+  const [filter, setFilter] = useState<ActivityFilter>("all");
   const [selectedCategoryFilter, setCategoryFilter] = useState("all");
   const categoryFilter = data.categories.some(
     (c) => c.id === selectedCategoryFilter,
@@ -242,7 +242,7 @@ export default function BudgetApp() {
       notify(
         template
           ? "CSV şablonu indirildi."
-          : "Tüm işlemler CSV olarak dışa aktarıldı.",
+          : "Gelir/gider kayıtları CSV olarak aktarıldı. Transferler tam JSON yedeğinde yer alır.",
       );
     } catch (e) {
       setFileError((e as Error).message);
@@ -285,13 +285,12 @@ export default function BudgetApp() {
       setConfirmBusy(false);
     }
   };
-  const visibleTransactions = s.transactions.filter(
-    (t) =>
-      (filter === "all" || t.type === filter) &&
-      (categoryFilter === "all" || t.categoryId === categoryFilter) &&
-      `${t.description} ${data.categories.find((c) => c.id === t.categoryId)?.name || ""}`
-        .toLocaleLowerCase("tr-TR")
-        .includes(search.toLocaleLowerCase("tr-TR")),
+  const visibleActivity = filterActivity(
+    data,
+    month,
+    filter,
+    categoryFilter,
+    search,
   );
   if (loading)
     return (
@@ -843,6 +842,13 @@ export default function BudgetApp() {
                     </Txt>
                     <TransactionRows
                       transactions={s.transactions}
+                      transfers={(data.accountTransfers ?? []).filter((t) =>
+                        t.date.startsWith(month + "-"),
+                      )}
+                      accounts={data.financialAccounts}
+                      onTransferPress={(transfer) =>
+                        setDialog({ kind: "transfer", transfer })
+                      }
                       categories={data.categories}
                       limit={5}
                       onPress={(t) =>
@@ -889,7 +895,7 @@ export default function BudgetApp() {
                       <Icon name="search" size={16} />
                       <TextInput
                         accessibilityLabel="İşlem ara"
-                        placeholder="İşlem veya kategori ara…"
+                        placeholder="İşlem, kategori veya hesap ara…"
                         placeholderTextColor={C.dim}
                         value={search}
                         onChangeText={setSearch}
@@ -903,59 +909,80 @@ export default function BudgetApp() {
                         }}
                       />
                     </View>
-                    <View style={{ flexDirection: "row", gap: 5 }}>
-                      {(["all", "expense", "income"] as const).map((f) => (
-                        <Button
-                          key={f}
-                          kind={filter === f ? "primary" : "secondary"}
-                          small
-                          onPress={() => setFilter(f)}
-                          style={{ flex: mobile ? 1 : undefined }}
-                        >
-                          {f === "all"
-                            ? "Tümü"
-                            : f === "expense"
-                              ? "Gider"
-                              : "Gelir"}
-                        </Button>
-                      ))}
+                    <View
+                      style={{ flexDirection: "row", flexWrap: "wrap", gap: 5 }}
+                    >
+                      {(["all", "expense", "income", "transfer"] as const).map(
+                        (f) => (
+                          <Button
+                            key={f}
+                            kind={filter === f ? "primary" : "secondary"}
+                            small
+                            onPress={() => {
+                              setFilter(f);
+                              if (f === "transfer") setCategoryFilter("all");
+                            }}
+                            style={{
+                              flexGrow: mobile ? 1 : 0,
+                              flexBasis: mobile ? "45%" : undefined,
+                            }}
+                          >
+                            {f === "all"
+                              ? "Tümü"
+                              : f === "expense"
+                                ? "Gider"
+                                : f === "income"
+                                  ? "Gelir"
+                                  : "Transfer"}
+                          </Button>
+                        ),
+                      )}
                     </View>
                   </View>
-                  <ScrollView
-                    horizontal
-                    showsHorizontalScrollIndicator={false}
-                    contentContainerStyle={{ gap: 7, paddingBottom: 12 }}
-                  >
-                    <Button
-                      small
-                      kind={categoryFilter === "all" ? "secondary" : "ghost"}
-                      onPress={() => setCategoryFilter("all")}
+                  {filter !== "transfer" ? (
+                    <ScrollView
+                      horizontal
+                      showsHorizontalScrollIndicator={false}
+                      contentContainerStyle={{ gap: 7, paddingBottom: 12 }}
                     >
-                      Tüm kategoriler
-                    </Button>
-                    {data.categories
-                      .filter((c) => filter === "all" || c.type === filter)
-                      .map((c) => (
-                        <Button
-                          key={c.id}
-                          small
-                          kind={categoryFilter === c.id ? "secondary" : "ghost"}
-                          onPress={() => setCategoryFilter(c.id)}
-                        >
-                          {c.name}
-                        </Button>
-                      ))}
-                  </ScrollView>
+                      <Button
+                        small
+                        kind={categoryFilter === "all" ? "secondary" : "ghost"}
+                        onPress={() => setCategoryFilter("all")}
+                      >
+                        Tüm kategoriler
+                      </Button>
+                      {data.categories
+                        .filter((c) => filter === "all" || c.type === filter)
+                        .map((c) => (
+                          <Button
+                            key={c.id}
+                            small
+                            kind={
+                              categoryFilter === c.id ? "secondary" : "ghost"
+                            }
+                            onPress={() => setCategoryFilter(c.id)}
+                          >
+                            {c.name}
+                          </Button>
+                        ))}
+                    </ScrollView>
+                  ) : null}
                   <View style={[styles.between, { marginTop: 8 }]}>
                     <Txt style={styles.label}>
-                      {visibleTransactions.length} İŞLEM
+                      {visibleActivity.count} HAREKET
                     </Txt>
                     <Txt style={{ color: C.dim, fontSize: 10 }}>
                       Düzenlemek için dokun
                     </Txt>
                   </View>
                   <TransactionRows
-                    transactions={visibleTransactions}
+                    transactions={visibleActivity.transactions}
+                    transfers={visibleActivity.transfers}
+                    accounts={data.financialAccounts}
+                    onTransferPress={(transfer) =>
+                      setDialog({ kind: "transfer", transfer })
+                    }
                     categories={data.categories}
                     onPress={(t) =>
                       setDialog({ kind: "transaction", transaction: t })
@@ -1088,7 +1115,7 @@ export default function BudgetApp() {
                         cihaz kayıtların otomatik aktarılmaz; mevcut özgün kopya
                         korunur. İnternet bağlantısı gerekir.
                         {
-                          " Düzenli olarak tam JSON yedeği indir; CSV yalnızca işlemleri içerir."
+                          " Düzenli olarak tam JSON yedeği indir; CSV yalnızca gelir/gider kayıtlarını içerir."
                         }
                       </Txt>
                     </View>
@@ -1145,9 +1172,9 @@ export default function BudgetApp() {
                         marginBottom: 18,
                       }}
                     >
-                      {data.transactions.length} işlem, tüm aylar dahil. CSV
-                      işlem tarihini, türünü, kategorisini, tutarını ve
-                      açıklamasını içerir.
+                      {data.transactions.length} gelir/gider kaydı, tüm aylar
+                      dahil. CSV işlem tarihini, türünü, kategorisini, tutarını
+                      ve açıklamasını içerir.
                     </Txt>
                     <Button
                       icon="download"
@@ -1158,8 +1185,9 @@ export default function BudgetApp() {
                       CSV dışa aktar
                     </Button>
                     <Txt style={{ fontSize: 10, color: C.dim, marginTop: 13 }}>
-                      CSV yalnızca işlemleri taşır; hesapları, transferleri,
-                      planları, aylık limitleri ve tasarruf hedeflerini içermez.
+                      CSV yalnızca gelir/gider kayıtlarını taşır; hesapları,
+                      transferleri, planları, aylık limitleri ve tasarruf
+                      hedeflerini içermez.
                     </Txt>
                   </Card>
                 </View>
