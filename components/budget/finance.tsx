@@ -1,7 +1,7 @@
 import { AccountActivitySheet } from "./account-activity";
 import { currencyScale } from "@/lib/budget/currency";
 import React, { useState } from "react";
-import { View } from "react-native";
+import { Pressable, View } from "react-native";
 import { useBudget } from "@/lib/budget/store";
 import {
   id,
@@ -668,6 +668,7 @@ export function AccountsDashboard({
 }) {
   const { data, update } = useBudget();
   const [showArchived, setShowArchived] = useState(false);
+  const [tab, setTab] = useState<"accounts" | "transfers">("accounts");
   const [activityId, setActivityId] = useState<string | null>(null);
   const activityAccount = data.financialAccounts?.find(
     (a) => a.id === activityId,
@@ -702,215 +703,291 @@ export function AccountsDashboard({
           onClose={() => setActivityId(null)}
         />
       ) : null}
-      <Card>
-        <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-          <Button
-            kind="secondary"
-            icon="repeat"
-            disabled={all.filter((a) => !a.archived).length < 2}
-            onPress={() => onTransfer()}
+      <View
+        accessibilityRole="tablist"
+        accessibilityLabel="Hesaplar ve transferler"
+        style={{ flexDirection: "row", flexWrap: "wrap", gap: 9 }}
+      >
+        {(
+          [
+            {
+              id: "accounts",
+              label: "Hesaplar & Kartlar",
+              icon: "credit-card",
+            },
+            { id: "transfers", label: "Transferler", icon: "repeat" },
+          ] as const
+        ).map((item) => (
+          <Pressable
+            key={item.id}
+            accessibilityRole="tab"
+            accessibilityLabel={item.label}
+            accessibilityState={{ selected: tab === item.id }}
+            aria-selected={tab === item.id}
+            onPress={() => {
+              setTab(item.id);
+              setError("");
+            }}
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 8,
+              paddingHorizontal: 14,
+              paddingVertical: 12,
+              borderRadius: 10,
+              borderWidth: 1,
+              borderColor: tab === item.id ? C.green : C.border,
+              backgroundColor: tab === item.id ? "#22C55E16" : C.panel,
+            }}
           >
-            Transfer / kart öde
-          </Button>
-          <Button kind="ghost" small onPress={() => setShowArchived((v) => !v)}>
-            {showArchived
-              ? "Aktif hesapları göster"
-              : "Arşivlenenleri de göster"}
-          </Button>
-        </View>
-        <Txt style={{ color: C.muted, fontSize: 12, marginTop: 12 }}>
-          Bakiyeler {now} tarihine kadarki atanmış işlemlerden hesaplanır.
-          Hesapsız eski kayıtlar raporlarında kalır. Farklı para birimleri
-          birbirine eklenmez.
-        </Txt>
-      </Card>
-      <ErrorText message={error} />
-      {currencies.map((c) => {
-        const accounts = all.filter((a) => !a.archived && a.currency === c);
-        const assets = accounts
-          .filter((a) => a.kind !== "card")
-          .reduce((n, a) => n + accountBalance(data, a, now), 0);
-        const cardBalance = accounts
-          .filter((a) => a.kind === "card")
-          .reduce((n, a) => n + accountBalance(data, a, now), 0);
-        return (
-          <Card key={c}>
-            <Txt bold>
-              {c} · Hesap toplamı {moneyIn(assets, c)}
-            </Txt>
-            <Txt style={{ color: C.muted, marginTop: 6 }}>
-              Kart net borcu {moneyIn(-cardBalance, c)} · Net varlık{" "}
-              {moneyIn(assets + cardBalance, c)}
-            </Txt>
-          </Card>
-        );
-      })}
-      {!visible.length ? (
-        <Card>
-          <Icon name="credit-card" size={26} color={C.green} />
-          <Txt bold style={{ marginTop: 12 }}>
-            Hesaplarını ekleyerek başla
-          </Txt>
-          <Txt style={{ color: C.muted, marginTop: 8 }}>
-            Nakit, banka veya kredi kartı oluştur. Var olan gelir ve giderlerin
-            hiçbir hesaba otomatik atanmaz.
-          </Txt>
-          <Button style={{ marginTop: 14 }} onPress={() => onAccount()}>
-            İlk hesabını ekle
-          </Button>
-        </Card>
-      ) : null}
-      {visible.map((a) => {
-        const balance = accountBalance(data, a, now);
-        const pending = pendingInstallments(data, a.id);
-        const dates = a.kind === "card" ? cardDates(a, now) : null;
-        return (
-          <Card key={a.id}>
-            <View
-              style={{
-                flexDirection: "row",
-                justifyContent: "space-between",
-                gap: 10,
-              }}
-            >
-              <View style={{ flex: 1 }}>
-                <Txt bold style={{ fontSize: 18 }}>
-                  {a.name}
-                  {a.archived ? " · Arşivde" : ""}
-                </Txt>
-                <Txt style={{ color: C.muted, fontSize: 12, marginTop: 5 }}>
-                  {kindNames[a.kind]} · {a.currency}
-                </Txt>
-              </View>
-              <Icon
-                name={
-                  a.kind === "card"
-                    ? "credit-card"
-                    : a.kind === "cash"
-                      ? "pocket"
-                      : "briefcase"
-                }
-                color={C.green}
-              />
-            </View>
+            <Icon
+              name={item.icon}
+              size={17}
+              color={tab === item.id ? C.green : C.muted}
+            />
             <Txt
               bold
               style={{
-                fontSize: 26,
-                marginVertical: 16,
-                color: balance < 0 ? C.red : C.green,
+                color: tab === item.id ? C.green : C.muted,
+                fontSize: 13,
               }}
             >
-              {moneyIn(a.kind === "card" ? -balance : balance, a.currency)}
+              {item.label}
             </Txt>
-            {a.kind === "card" ? (
-              <>
-                <Caption>
-                  Kayıtlı kart borcu. Eksi değer kartta alacak bakiyesi olduğunu
-                  gösterir. Bankanın ekstre tutarı farklı olabilir.
-                </Caption>
-                <Txt style={{ color: C.muted, fontSize: 12 }}>
-                  İşlenmemiş taksitler: {moneyIn(pending, a.currency)}
-                </Txt>
-                <Txt style={{ color: C.muted, fontSize: 12, marginTop: 6 }}>
-                  Taksitler dahil tahmini kalan limit:{" "}
-                  {moneyIn(a.creditLimit! + balance - pending, a.currency)}
-                </Txt>
-                <Txt
-                  style={{
-                    color: C.muted,
-                    fontSize: 12,
-                    marginTop: 6,
-                    marginBottom: 14,
-                  }}
-                >
-                  Sonraki kesim: {dates!.closing} · Son ödeme: {dates!.payment}
-                </Txt>
-              </>
-            ) : null}
-            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}>
+          </Pressable>
+        ))}
+      </View>
+      <ErrorText message={error} />
+      {tab === "accounts" ? (
+        <>
+          <Card>
+            <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               <Button
-                small
-                kind="secondary"
-                icon="list"
-                accessibilityLabel={`${a.name} aylık hareketleri`}
-                onPress={() => setActivityId(a.id)}
-              >
-                Aylık hareketler
-              </Button>
-              <Button
-                small
-                kind="secondary"
-                disabled={a.archived}
-                onPress={() => onAccount(a)}
-              >
-                Düzenle
-              </Button>
-              {a.kind === "card" && !a.archived ? (
-                <Button
-                  small
-                  disabled={balance >= 0}
-                  onPress={() => onTransfer({ toId: a.id, amount: -balance })}
-                >
-                  Kart öde
-                </Button>
-              ) : null}
-              <Button
-                small
                 kind="ghost"
-                busy={busy}
-                onPress={() => void archive(a)}
+                small
+                onPress={() => setShowArchived((v) => !v)}
               >
-                {a.archived ? "Arşivden çıkar" : "Arşivle"}
+                {showArchived
+                  ? "Aktif hesapları göster"
+                  : "Arşivlenenleri de göster"}
               </Button>
             </View>
+            <Txt style={{ color: C.muted, fontSize: 12, marginTop: 12 }}>
+              Bakiyeler {now} tarihine kadarki atanmış işlemlerden hesaplanır.
+              Hesapsız eski kayıtlar raporlarında kalır. Farklı para birimleri
+              birbirine eklenmez.
+            </Txt>
           </Card>
-        );
-      })}
-      <Card>
-        <Txt bold style={{ fontSize: 18, marginBottom: 12 }}>
-          Transfer geçmişi
-        </Txt>
-        {!data.accountTransfers?.length ? (
-          <Txt style={{ color: C.muted }}>Henüz transfer yok.</Txt>
-        ) : (
-          [...(data.accountTransfers ?? [])]
-            .sort((a, b) => b.date.localeCompare(a.date))
-            .slice(0, 50)
-            .map((t) => (
-              <View
-                key={t.id}
-                style={{
-                  borderBottomWidth: 1,
-                  borderColor: C.border,
-                  paddingVertical: 12,
-                  gap: 6,
-                }}
-              >
-                <Txt>
-                  {all.find((a) => a.id === t.fromId)?.name} →{" "}
-                  {all.find((a) => a.id === t.toId)?.name}
+          {currencies.map((c) => {
+            const accounts = all.filter((a) => !a.archived && a.currency === c);
+            const assets = accounts
+              .filter((a) => a.kind !== "card")
+              .reduce((n, a) => n + accountBalance(data, a, now), 0);
+            const cardBalance = accounts
+              .filter((a) => a.kind === "card")
+              .reduce((n, a) => n + accountBalance(data, a, now), 0);
+            return (
+              <Card key={c}>
+                <Txt bold>
+                  {c} · Hesap toplamı {moneyIn(assets, c)}
                 </Txt>
-                <Txt style={{ color: C.muted, fontSize: 12 }}>
-                  {t.date} · {moneyIn(t.amount, t.currency)}
-                  {t.note ? ` · ${t.note}` : ""}
+                <Txt style={{ color: C.muted, marginTop: 6 }}>
+                  Kart net borcu {moneyIn(-cardBalance, c)} · Net varlık{" "}
+                  {moneyIn(assets + cardBalance, c)}
                 </Txt>
-                <View style={{ flexDirection: "row", gap: 6 }}>
+              </Card>
+            );
+          })}
+          {!visible.length ? (
+            <Card>
+              <Icon name="credit-card" size={26} color={C.green} />
+              <Txt bold style={{ marginTop: 12 }}>
+                Hesaplarını ekleyerek başla
+              </Txt>
+              <Txt style={{ color: C.muted, marginTop: 8 }}>
+                Nakit, banka veya kredi kartı oluştur. Var olan gelir ve
+                giderlerin hiçbir hesaba otomatik atanmaz.
+              </Txt>
+              <Button style={{ marginTop: 14 }} onPress={() => onAccount()}>
+                İlk hesabını ekle
+              </Button>
+            </Card>
+          ) : null}
+          {visible.map((a) => {
+            const balance = accountBalance(data, a, now);
+            const pending = pendingInstallments(data, a.id);
+            const dates = a.kind === "card" ? cardDates(a, now) : null;
+            return (
+              <Card key={a.id}>
+                <View
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    gap: 10,
+                  }}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Txt bold style={{ fontSize: 18 }}>
+                      {a.name}
+                      {a.archived ? " · Arşivde" : ""}
+                    </Txt>
+                    <Txt style={{ color: C.muted, fontSize: 12, marginTop: 5 }}>
+                      {kindNames[a.kind]} · {a.currency}
+                    </Txt>
+                  </View>
+                  <Icon
+                    name={
+                      a.kind === "card"
+                        ? "credit-card"
+                        : a.kind === "cash"
+                          ? "pocket"
+                          : "briefcase"
+                    }
+                    color={C.green}
+                  />
+                </View>
+                <Txt
+                  bold
+                  style={{
+                    fontSize: 26,
+                    marginVertical: 16,
+                    color: balance < 0 ? C.red : C.green,
+                  }}
+                >
+                  {moneyIn(a.kind === "card" ? -balance : balance, a.currency)}
+                </Txt>
+                {a.kind === "card" ? (
+                  <>
+                    <Caption>
+                      Kayıtlı kart borcu. Eksi değer kartta alacak bakiyesi
+                      olduğunu gösterir. Bankanın ekstre tutarı farklı olabilir.
+                    </Caption>
+                    <Txt style={{ color: C.muted, fontSize: 12 }}>
+                      İşlenmemiş taksitler: {moneyIn(pending, a.currency)}
+                    </Txt>
+                    <Txt style={{ color: C.muted, fontSize: 12, marginTop: 6 }}>
+                      Taksitler dahil tahmini kalan limit:{" "}
+                      {moneyIn(a.creditLimit! + balance - pending, a.currency)}
+                    </Txt>
+                    <Txt
+                      style={{
+                        color: C.muted,
+                        fontSize: 12,
+                        marginTop: 6,
+                        marginBottom: 14,
+                      }}
+                    >
+                      Sonraki kesim: {dates!.closing} · Son ödeme:{" "}
+                      {dates!.payment}
+                    </Txt>
+                  </>
+                ) : null}
+                <View
+                  style={{ flexDirection: "row", flexWrap: "wrap", gap: 6 }}
+                >
+                  <Button
+                    small
+                    kind="secondary"
+                    icon="list"
+                    accessibilityLabel={`${a.name} aylık hareketleri`}
+                    onPress={() => setActivityId(a.id)}
+                  >
+                    Aylık hareketler
+                  </Button>
+                  <Button
+                    small
+                    kind="secondary"
+                    disabled={a.archived}
+                    onPress={() => onAccount(a)}
+                  >
+                    Düzenle
+                  </Button>
+                  {a.kind === "card" && !a.archived ? (
+                    <Button
+                      small
+                      disabled={balance >= 0}
+                      onPress={() =>
+                        onTransfer({ toId: a.id, amount: -balance })
+                      }
+                    >
+                      Kart öde
+                    </Button>
+                  ) : null}
                   <Button
                     small
                     kind="ghost"
-                    onPress={() => onTransfer({ transfer: t })}
+                    busy={busy}
+                    onPress={() => void archive(a)}
                   >
-                    Transferi düzenle
-                  </Button>
-                  <Button small kind="ghost" onPress={() => setDeleting(t)}>
-                    Transferi sil
+                    {a.archived ? "Arşivden çıkar" : "Arşivle"}
                   </Button>
                 </View>
-              </View>
-            ))
-        )}
-      </Card>
+              </Card>
+            );
+          })}
+        </>
+      ) : (
+        <>
+          <Card>
+            <Button
+              kind="secondary"
+              icon="repeat"
+              disabled={all.filter((a) => !a.archived).length < 2}
+              onPress={() => onTransfer()}
+            >
+              Transfer / kart öde
+            </Button>
+            <Txt style={{ color: C.muted, fontSize: 12, marginTop: 12 }}>
+              Hesaplar arası transfer ve kart ödemelerini burada yönet. Bu
+              hareketler gelir veya gider sayılmaz.
+            </Txt>
+          </Card>
+          <Card>
+            <Txt bold style={{ fontSize: 18, marginBottom: 12 }}>
+              Transfer geçmişi
+            </Txt>
+            {!data.accountTransfers?.length ? (
+              <Txt style={{ color: C.muted }}>Henüz transfer yok.</Txt>
+            ) : (
+              [...(data.accountTransfers ?? [])]
+                .sort((a, b) => b.date.localeCompare(a.date))
+                .slice(0, 50)
+                .map((t) => (
+                  <View
+                    key={t.id}
+                    style={{
+                      borderBottomWidth: 1,
+                      borderColor: C.border,
+                      paddingVertical: 12,
+                      gap: 6,
+                    }}
+                  >
+                    <Txt>
+                      {all.find((a) => a.id === t.fromId)?.name} →{" "}
+                      {all.find((a) => a.id === t.toId)?.name}
+                    </Txt>
+                    <Txt style={{ color: C.muted, fontSize: 12 }}>
+                      {t.date} · {moneyIn(t.amount, t.currency)}
+                      {t.note ? ` · ${t.note}` : ""}
+                    </Txt>
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                      <Button
+                        small
+                        kind="ghost"
+                        onPress={() => onTransfer({ transfer: t })}
+                      >
+                        Transferi düzenle
+                      </Button>
+                      <Button small kind="ghost" onPress={() => setDeleting(t)}>
+                        Transferi sil
+                      </Button>
+                    </View>
+                  </View>
+                ))
+            )}
+          </Card>
+        </>
+      )}
       {deleting ? (
         <Sheet
           title="Transfer silinsin mi?"
