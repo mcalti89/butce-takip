@@ -1,3 +1,7 @@
+import {
+  investmentCashDelta,
+  validPortfolioData,
+} from "./investment-portfolio";
 import { isInvestmentAccount } from "./account-scope";
 import {
   validExchange,
@@ -175,6 +179,7 @@ export function accountBalance(
       if (t.toId === account.id)
         n += cents(transferReceivedAmount(t), currency);
     }
+  n += minorUnits(investmentCashDelta(data, account, asOf), currency);
   return n / currencyScale(currency);
 }
 export function pendingInstallments(data: BudgetData, accountId: string) {
@@ -246,10 +251,18 @@ export function saveFinancialAccount(
     (data.accountTransfers ?? []).some(
       (t) => t.fromId === account.id || t.toId === account.id,
     ) ||
-    (data.paymentPlans ?? []).some((p) => p.accountId === account.id);
+    (data.paymentPlans ?? []).some((p) => p.accountId === account.id) ||
+    (data.investmentPositions ?? []).some((p) => p.accountId === account.id);
   if (previous && used && previous.currency !== account.currency)
     throw new Error(
       "İşlem veya plan bağlı hesabın para birimi değiştirilemez.",
+    );
+  if (
+    data.investmentPositions?.some((p) => p.accountId === account.id) &&
+    account.kind !== "investment"
+  )
+    throw new Error(
+      "Yatırım kaydı bağlı hesabı Yatırım türünde tut. Geçmiş kayıtlar korunur.",
     );
   if (previous && previous.kind !== account.kind) {
     if (
@@ -518,6 +531,7 @@ export function validFinanceData(data: BudgetData) {
       seen.add(key);
     }
   }
+  if (!validPortfolioData(data)) return false;
   for (const a of accounts)
     if (
       a.archived &&

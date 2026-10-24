@@ -47,3 +47,7 @@ yüklenirken geçmişi yatırım olarak sınıflandırılmış kayıtlar da geri
 Tam JSON/ham işlem CSV yedekleri saklanan geçmişi korur; rapor CSV'si yatırım
 hesaplarının gelir/giderini içermez. Yatırım özellikleri yeni hesaplara örnek
 hesap veya örnek hareket eklemez.
+
+Yatırım menüsündeki portföy kayıtları ve gerçekleşmiş getiriler için
+[INVESTMENT-PORTFOLIO.md](INVESTMENT-PORTFOLIO.md). Portföy kaydı bağlı hesap
+yatırım türünde kalır; böylece yatırım nakit/getirileri normal bütçeye taşınmaz.

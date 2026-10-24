@@ -1,3 +1,8 @@
+import {
+  saveInvestmentPosition,
+  saveInvestmentEntry,
+  portfolioAccountSummary,
+} from "../lib/budget/investment-portfolio";
 import { summarize } from "../lib/budget/model";
 import { nextMonthForecast } from "../lib/budget/reports";
 import { buildExchange, buildManualExchange } from "../lib/budget/exchange";
@@ -1058,6 +1063,144 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
       ).json();
       expect(restored.data.transactions).toEqual(doc.transactions);
       expect(summarize(restored.data, "2026-10").expense).toBe(100);
+    });
+    it("yatırım portföyü, mevduat ve aylık getiri SQL'de kullanıcıya özel saklanır; eski istemci yeni alanları silemez", async () => {
+      const user = await login(
+        "portfolio-" + randomUUID(),
+        `portfolio-${randomUUID()}@gmail.com`,
+      );
+      const other = await login(
+        "portfolio-other-" + randomUUID(),
+        `portfolio-${randomUUID()}@gmail.com`,
+      );
+      const initial = await (await call("data", undefined, user.cookie)).json();
+      let doc = emptyData();
+      const account = {
+        id: "invest",
+        name: "Investment",
+        kind: "investment" as const,
+        currency: "TRY",
+        openingBalance: 1000,
+        openingDate: "2026-10-01",
+        archived: false,
+      };
+      doc.financialAccounts = [account];
+      doc = saveInvestmentPosition(
+        doc,
+        {
+          id: "deposit",
+          accountId: account.id,
+          currency: "TRY",
+          name: "Deposit",
+          kind: "deposit",
+          startDate: "2026-10-01",
+          maturityDate: "2026-11-01",
+          annualRate: 36.5,
+          withholdingRate: 10,
+          archived: false,
+        },
+        {
+          id: "initial",
+          positionId: "deposit",
+          type: "allocate",
+          amount: 600,
+          date: "2026-10-01",
+          time: "09:00",
+          note: "Initial",
+        },
+      );
+      doc = saveInvestmentEntry(doc, {
+        id: "interest",
+        positionId: "deposit",
+        type: "income",
+        amount: 25,
+        date: "2026-10-23",
+        time: "12:00",
+        note: "Actual interest",
+      });
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: initial.revision,
+              data: doc,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      let current = await (await call("data", undefined, user.cookie)).json();
+      expect(current.data).toEqual(doc);
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
+      expect(
+        portfolioAccountSummary(
+          current.data,
+          account,
+          accountBalance(current.data, account, "2026-10-24"),
+          "2026-10-24",
+          "2026-10",
+        ),
+      ).toMatchObject({
+        cash: 425,
+        principal: 600,
+        monthIncome: 25,
+        totalValue: 1025,
+      });
+      expect(summarize(current.data, "2026-10")).toMatchObject({
+        income: 0,
+        expense: 0,
+      });
+      const stale = structuredClone(doc);
+      delete stale.investmentPositions;
+      delete stale.investmentEntries;
+      const rejected = await call(
+        "data",
+        { accountId: user.accountId, revision: current.revision, data: stale },
+        user.cookie,
+      );
+      expect(rejected.status).toBe(409);
+      expect((await rejected.json()).code).toBe("APP_UPDATE_REQUIRED");
+      const invalid = structuredClone(doc);
+      invalid.investmentEntries![0].amount = 2000;
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: current.revision,
+              data: invalid,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(400);
+      expect((await repository.read(user.accountId)).data).toEqual(doc);
+      doc = saveInvestmentEntry(doc, {
+        ...doc.investmentEntries![1],
+        amount: 30,
+      });
+      expect(
+        (
+          await call(
+            "data",
+            {
+              accountId: user.accountId,
+              revision: current.revision,
+              data: doc,
+            },
+            user.cookie,
+          )
+        ).status,
+      ).toBe(200);
+      current = await (await call("data", undefined, user.cookie)).json();
+      expect(accountBalance(current.data, account, "2026-10-24")).toBe(1030);
+      expect(current.data.investmentEntries).toHaveLength(2);
+      expect(
+        (await (await call("data", undefined, other.cookie)).json()).data,
+      ).toEqual(emptyData());
     });
     it("çıkış yalnızca ilgili oturumu kapatır", async () => {
       expect((await call("logout", {}, bob.cookie)).status).toBe(200);

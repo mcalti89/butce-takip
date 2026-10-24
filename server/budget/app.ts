@@ -322,6 +322,8 @@ export function createBudgetApp(options: Options = {}) {
           "financialAccounts",
           "accountTransfers",
           "paymentPlans",
+          "investmentPositions",
+          "investmentEntries",
         ] as const;
         if (
           revision > 0 &&
@@ -344,12 +346,10 @@ export function createBudgetApp(options: Options = {}) {
         if (data.financialAccounts?.some((a) => a.kind === "investment")) {
           const previous = await db.read(account.id);
           if (previous.revision !== revision)
-            return res
-              .status(409)
-              .json({
-                error:
-                  "Başka bir cihaz veya sekme verileri güncelledi. Son verileri yükleyip değişikliğini tekrar uygula.",
-              });
+            return res.status(409).json({
+              error:
+                "Başka bir cihaz veya sekme verileri güncelledi. Son verileri yükleyip değişikliğini tekrar uygula.",
+            });
           if (!validInvestmentChanges(previous.data, data))
             return res.status(400).json({
               error:

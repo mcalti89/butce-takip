@@ -1,3 +1,7 @@
+import {
+  investmentCashEntries,
+  type InvestmentEntry,
+} from "./investment-portfolio";
 import { activityRows, type ActivityRow } from "./activity";
 import { transferReceivedAmount } from "./exchange";
 import { compareDatedRecordsNewestFirst } from "./time";
@@ -7,7 +11,13 @@ import { minorUnits, currencyScale } from "./currency";
 import { accountBalance, type FinancialAccount } from "./finance";
 import { monthEnd } from "./reports";
 
-export type AccountActivityRow = ActivityRow & {
+export type AccountActivityRow = (
+  | ActivityRow
+  | {
+      kind: "investment";
+      value: InvestmentEntry & { type: "income" | "expense" };
+    }
+) & {
   amount: number;
   direction: "in" | "out";
   balanceAfter: number;
@@ -42,6 +52,9 @@ export function accountMonthActivity(
         t.date <= end,
     )
     .sort(compareDatedRecordsNewestFirst);
+  const cashEntries = investmentCashEntries(data, account.id, end).filter(
+    (e) => e.date >= start,
+  );
   const scale = currencyScale(account.currency),
     units = (n: number) => minorUnits(n, account.currency);
   const sum = (type: "income" | "expense") =>
@@ -56,15 +69,36 @@ export function accountMonthActivity(
     transfers
       .filter((t) => t.fromId === account.id)
       .reduce((n, t) => n + units(t.amount), 0) / scale;
-  const income = sum("income"),
-    expense = sum("expense");
+  const income =
+      (units(sum("income")) +
+        cashEntries
+          .filter((e) => e.type === "income")
+          .reduce((n, e) => n + units(e.amount), 0)) /
+      scale,
+    expense =
+      (units(sum("expense")) +
+        cashEntries
+          .filter((e) => e.type === "expense")
+          .reduce((n, e) => n + units(e.amount), 0)) /
+      scale;
   const openingAdjustment =
     account.openingDate >= start && account.openingDate <= end
       ? account.openingBalance
       : 0;
   // Calculate the complete ledger before any display filter is applied.
   let balance = units(opening) + units(openingAdjustment);
-  const rows: AccountActivityRow[] = activityRows(transactions, transfers)
+  const combined: (
+    | ActivityRow
+    | {
+        kind: "investment";
+        value: InvestmentEntry & { type: "income" | "expense" };
+      }
+  )[] = [
+    ...activityRows(transactions, transfers),
+    ...cashEntries.map((value) => ({ kind: "investment" as const, value })),
+  ];
+  const rows: AccountActivityRow[] = combined
+    .sort((a, b) => compareDatedRecordsNewestFirst(a.value, b.value))
     .reverse()
     .map((entry) => {
       const incoming =

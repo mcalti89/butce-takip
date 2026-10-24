@@ -1,3 +1,4 @@
+import { investmentEntryNames } from "@/lib/budget/investment-portfolio";
 import React, { useState } from "react";
 import { View } from "react-native";
 import {
@@ -188,14 +189,23 @@ export function AccountActivitySheet({
                 (a) => a.id === (incoming ? transfer.fromId : transfer.toId),
               )
             : undefined;
+          const portfolioEntry =
+            row.kind === "investment" ? row.value : undefined;
+          const position = portfolioEntry
+            ? data.investmentPositions?.find(
+                (p) => p.id === portfolioEntry.positionId,
+              )
+            : undefined;
           const category = transaction
             ? data.categories.find((c) => c.id === transaction.categoryId)
             : undefined;
           const typeLabel = transfer
             ? `${transfer.exchange ? "Döviz al / sat · " : ""}${incoming ? "Gelen transfer" : "Giden transfer"}`
-            : incoming
-              ? "Gelir"
-              : "Gider";
+            : portfolioEntry
+              ? investmentEntryNames[portfolioEntry.type]
+              : incoming
+                ? "Gelir"
+                : "Gider";
           return (
             <View
               key={`${row.kind}:${t.id}`}
@@ -219,7 +229,9 @@ export function AccountActivitySheet({
                   <Txt bold>
                     {transaction
                       ? transaction.description || category?.name || "İşlem"
-                      : transfer?.note || typeLabel}
+                      : portfolioEntry
+                        ? portfolioEntry.note || position?.name || typeLabel
+                        : transfer?.note || typeLabel}
                   </Txt>
                   <Txt style={{ color: C.muted, fontSize: 12 }}>
                     {t.date} · {t.time ?? "Saat belirtilmedi"} · {typeLabel}
@@ -227,7 +239,7 @@ export function AccountActivitySheet({
                   <Txt style={{ color: C.dim, fontSize: 11 }}>
                     {transfer
                       ? `${incoming ? "Gönderen" : "Alıcı"}: ${other?.name ?? "Diğer hesap"}`
-                      : category?.name}
+                      : (position?.name ?? category?.name)}
                   </Txt>
                 </View>
                 <View style={{ alignItems: "flex-end", flexShrink: 1, gap: 4 }}>

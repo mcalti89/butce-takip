@@ -95,17 +95,19 @@ function balanceInput(s: string, currency: string) {
 }
 export function AccountEditor({
   account,
+  initialKind,
   onClose,
   onDone,
 }: {
   account?: FinancialAccount;
+  initialKind?: FinancialAccount["kind"];
   onClose: () => void;
   onDone: (s: string) => void;
 }) {
   const { data, update } = useBudget();
   const [name, setName] = useState(account?.name ?? "");
   const [kind, setKind] = useState<FinancialAccount["kind"]>(
-    account?.kind ?? "bank",
+    account?.kind ?? initialKind ?? "bank",
   );
   const [currency, setCurrency] = useState(account?.currency ?? "TRY");
   const [opening, setOpening] = useState(
@@ -129,7 +131,8 @@ export function AccountEditor({
       (data.accountTransfers ?? []).some(
         (t) => t.fromId === account.id || t.toId === account.id,
       ) ||
-      (data.paymentPlans ?? []).some((p) => p.accountId === account.id));
+      (data.paymentPlans ?? []).some((p) => p.accountId === account.id) ||
+      (data.investmentPositions ?? []).some((p) => p.accountId === account.id));
   async function save() {
     setError("");
     const n = balanceInput(opening, currency),
@@ -262,9 +265,9 @@ export function AccountEditor({
       {kind === "investment" ? (
         <Caption>
           Yatırım bakiyesi genel toplamlara, bütçeye ve tahminlere katılmaz. Bu
-          hesaba transfer yapabilirsin; yeni gelir/gider, ödeme planı ve döviz
-          dönüşümü eklenmez. Önceki gelir/gider ve planlar korunur; hesap
-          yatırım türündeyken genel hesaplamalarda kullanılmaz.
+          hesaba transfer yapabilir, Yatırım menüsünden anapara ve getiri takibi
+          yapabilirsin. Günlük gelir/gider, ödeme planı ve döviz dönüşümü
+          seçeneklerinde yer almaz. Önceki kayıtlar korunur.
         </Caption>
       ) : null}
       {kind === "card" ? (
@@ -935,8 +938,9 @@ export function AccountsDashboard({
                 </Txt>
                 {a.kind === "investment" ? (
                   <Caption>
-                    Yatırım bakiyesi · Genel hesaplamaların dışında. Para
-                    aktarmak için Transferler sekmesini kullan.
+                    Yatırım bakiyesi · Genel hesaplamaların dışında. Bu bakiye
+                    nakit ve maliyet/anapara toplamıdır; güncel piyasa değeri
+                    Yatırım menüsünde gösterilir.
                   </Caption>
                 ) : null}
                 {a.kind === "card" ? (

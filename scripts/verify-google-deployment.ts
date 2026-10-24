@@ -239,6 +239,38 @@ export async function verifyGoogleDeployment() {
       date: financeDate,
       note: "Synthetic investment funding",
     });
+    data.investmentPositions = [
+      {
+        id: "smoke-deposit",
+        accountId: "smoke-investment",
+        currency: "TRY",
+        name: "Synthetic deposit",
+        kind: "deposit",
+        startDate: financeDate,
+        annualRate: 36.5,
+        archived: false,
+      },
+    ];
+    data.investmentEntries = [
+      {
+        id: "smoke-placement",
+        positionId: "smoke-deposit",
+        type: "allocate",
+        amount: 1000,
+        date: financeDate,
+        time: "09:00",
+        note: "Synthetic placement",
+      },
+      {
+        id: "smoke-interest",
+        positionId: "smoke-deposit",
+        type: "income",
+        amount: 10,
+        date: financeDate,
+        time: "12:00",
+        note: "Synthetic interest",
+      },
+    ];
     data.transactions.push({
       accountId: "smoke-card",
       planId: "smoke-plan",
@@ -273,6 +305,21 @@ export async function verifyGoogleDeployment() {
     );
     console.log(
       "Yatırım SQL yayın kontrolü başarılı; hesap türü ve fon transferi kayıpsız saklandı.",
+    );
+    const oldPortfolioClient = { ...data };
+    delete oldPortfolioClient.investmentPositions;
+    delete oldPortfolioClient.investmentEntries;
+    check(
+      (
+        await request(
+          "data",
+          { accountId: a.accountId, revision: 2, data: oldPortfolioClient },
+          a.cookie,
+        )
+      ).status === 409,
+    );
+    console.log(
+      "Yatırım portföyü SQL yayın kontrolü başarılı; anapara, mevduat ve getiri kayıtları kullanıcıya özel saklandı.",
     );
     const other = await (await request("data", undefined, b.cookie)).json();
     check(other.revision === 1 && isDeepStrictEqual(other.data, emptyData()));

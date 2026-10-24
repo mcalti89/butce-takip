@@ -1,3 +1,4 @@
+import { InvestmentDashboard } from "@/components/budget/investments";
 import { ExchangeEditor } from "@/components/budget/exchange";
 import { filterActivity, type ActivityFilter } from "@/lib/budget/activity";
 import { CategoryManager } from "@/components/budget/categories";
@@ -76,6 +77,7 @@ type Page =
   | "budgets"
   | "fx"
   | "accounts"
+  | "investments"
   | "calendar"
   | "data"
   | "settings";
@@ -85,7 +87,7 @@ type Dialog =
       transaction?: Transaction;
       draft?: Partial<Transaction>;
     }
-  | { kind: "account"; account?: FinancialAccount }
+  | { kind: "account"; account?: FinancialAccount; investment?: boolean }
   | { kind: "exchange"; transfer?: AccountTransfer }
   | {
       kind: "transfer";
@@ -111,6 +113,12 @@ const NAV: { id: Page; title: string; short: string; icon: string }[] = [
     title: "Hesaplar & kartlar",
     short: "Hesaplar",
     icon: "credit-card",
+  },
+  {
+    id: "investments",
+    title: "Yatırım",
+    short: "Yatırım",
+    icon: "trending-up",
   },
   { id: "calendar", title: "Ödeme takvimi", short: "Takvim", icon: "calendar" },
   {
@@ -529,13 +537,15 @@ export default function BudgetApp() {
                           ? "Planın ne kadar kaldı?"
                           : page === "fx"
                             ? "Döviz de, net gör."
-                            : page === "accounts"
-                              ? "Hesapların ve kartların."
-                              : page === "calendar"
-                                ? "Ödemelerini planla."
-                                : page === "settings"
-                                  ? "Ayarlar"
-                                  : "Bütçen. Senin düzenin."}
+                            : page === "investments"
+                              ? "Yatırımlarını takip et."
+                              : page === "accounts"
+                                ? "Hesapların ve kartların."
+                                : page === "calendar"
+                                  ? "Ödemelerini planla."
+                                  : page === "settings"
+                                    ? "Ayarlar"
+                                    : "Bütçen. Senin düzenin."}
                 </Txt>
                 <Txt style={{ color: C.muted, fontSize: 12, marginTop: 3 }}>
                   {page === "overview"
@@ -548,16 +558,18 @@ export default function BudgetApp() {
                           ? "Kategori limitlerini aya özel belirle."
                           : page === "fx"
                             ? "TCMB alış ve satış kurlarını tarihleriyle izle."
-                            : page === "accounts"
-                              ? "Bakiyelerini ve transferlerini tek yerde gör."
-                              : page === "calendar"
-                                ? "Yaklaşan gelir, ödeme ve taksitlerini takip et."
-                                : page === "settings"
-                                  ? "Uygulama kurulumu ve cihazında kullanım."
-                                  : "Kategorilerini yönet, verilerini yanında taşı."}
+                            : page === "investments"
+                              ? "Anapara, mevduat faizi ve gerçekleşen getiriler."
+                              : page === "accounts"
+                                ? "Bakiyelerini ve transferlerini tek yerde gör."
+                                : page === "calendar"
+                                  ? "Yaklaşan gelir, ödeme ve taksitlerini takip et."
+                                  : page === "settings"
+                                    ? "Uygulama kurulumu ve cihazında kullanım."
+                                    : "Kategorilerini yönet, verilerini yanında taşı."}
                 </Txt>
               </View>
-              {page === "accounts" ? (
+              {page === "investments" ? null : page === "accounts" ? (
                 <Button
                   icon="plus"
                   onPress={() => setDialog({ kind: "account" })}
@@ -675,6 +687,15 @@ export default function BudgetApp() {
             ) : null}
             {Platform.OS === "web" ? (
               <PwaPanel visible={page === "settings"} />
+            ) : null}
+            {page === "investments" ? (
+              <InvestmentDashboard
+                onAccount={() =>
+                  setDialog({ kind: "account", investment: true })
+                }
+                onTransfer={() => setDialog({ kind: "transfer" })}
+                onDone={notify}
+              />
             ) : null}
             {page === "accounts" ? (
               <AccountsDashboard
@@ -1393,6 +1414,7 @@ export default function BudgetApp() {
       {dialog?.kind === "account" ? (
         <AccountEditor
           account={dialog.account}
+          initialKind={dialog.investment ? "investment" : undefined}
           onClose={close}
           onDone={notify}
         />

@@ -1,3 +1,7 @@
+import type {
+  InvestmentPosition,
+  InvestmentEntry,
+} from "./investment-portfolio";
 import { budgetTransactions } from "./account-scope";
 import { validTime, compareDatedRecordsNewestFirst } from "./time";
 export { localTime, validTime } from "./time";
@@ -52,6 +56,8 @@ export type BudgetData = {
   financialAccounts?: FinancialAccount[];
   accountTransfers?: AccountTransfer[];
   paymentPlans?: PaymentPlan[];
+  investmentPositions?: InvestmentPosition[];
+  investmentEntries?: InvestmentEntry[];
   categories: Category[];
   transactions: Transaction[];
   budgets: Record<string, Record<string, number>>;
@@ -206,6 +212,8 @@ export function emptyData(): BudgetData {
     financialAccounts: [],
     accountTransfers: [],
     paymentPlans: [],
+    investmentPositions: [],
+    investmentEntries: [],
     categories: [...DEFAULT_CATEGORIES],
     transactions: [],
     budgets: {},
