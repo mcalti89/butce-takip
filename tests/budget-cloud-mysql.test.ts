@@ -26,6 +26,7 @@ import {
 } from "../server/budget/google";
 import { hashPassword, tokenHash } from "../server/budget/security";
 import { emptyData, demoData } from "../lib/budget/model";
+import { MAX_RECEIPT_STORAGE } from "../lib/budget/receipt-model";
 
 // Only an explicitly supplied disposable local database may run this destructive suite.
 const databaseUrl = process.env.BUDGET_TEST_DATABASE_URL;
@@ -1423,7 +1424,7 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
         expect(responses.filter((r) => r.status === 409)).toHaveLength(1);
         expect((await (await f.list()).json()).receipts).toHaveLength(10);
       });
-      it("100 MB kullanıcı kotasını denetler, başka kullanıcının kotasını etkilemez", async () => {
+      it("3 GB kullanıcı kotasını denetler, başka kullanıcının kotasını etkilemez", async () => {
         const f = await fixture(),
           other = await fixture();
         expect(
@@ -1431,7 +1432,7 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
         ).toBe(200);
         await pool.execute(
           "UPDATE budget_cloud_receipts SET byte_size=? WHERE account_id=? AND id=?",
-          [100 * 1024 * 1024 - pdf.length, f.user.accountId, f.body.id],
+          [MAX_RECEIPT_STORAGE - pdf.length, f.user.accountId, f.body.id],
         );
         expect(
           (

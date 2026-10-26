@@ -4,6 +4,8 @@ import { useBudget } from "@/lib/budget/store";
 import { useReceiptIndex } from "@/lib/budget/receipts";
 import {
   MAX_RECEIPTS_PER_ENTRY,
+  MAX_STORED_RECEIPTS,
+  MAX_RECEIPT_STORAGE,
   type PickedReceipt,
   type Receipt,
   type ReceiptKind,
@@ -16,9 +18,11 @@ import {
 } from "@/lib/budget/cloudApi";
 import { Button, C, ErrorText, Icon, Txt } from "./ui";
 const sizeLabel = (size: number) =>
-  size >= 1024 * 1024
-    ? `${(size / 1024 / 1024).toFixed(1)} MB`
-    : `${Math.ceil(size / 1024)} KB`;
+  size >= 1024 * 1024 * 1024
+    ? `${(size / 1024 / 1024 / 1024).toFixed(1)} GB`
+    : size >= 1024 * 1024
+      ? `${(size / 1024 / 1024).toFixed(1)} MB`
+      : `${Math.ceil(size / 1024)} KB`;
 export function useReceiptEditor(
   kind: ReceiptKind,
   entryId: string,
@@ -207,10 +211,12 @@ export function useReceiptEditor(
         <ErrorText message={error || index.error} />
         <Txt style={{ fontSize: 10, color: C.dim }}>
           Kullanılan alan:{" "}
-          {sizeLabel(index.receipts.reduce((sum, r) => sum + r.size, 0))} / 100
-          MB · {index.receipts.length}/1000 dosya. Yalnızca sen erişebilirsin.
-          İşlemi silmek, bağlı dekontları da siler. CSV/JSON yedekleri PDF
-          dosyalarını içermez.
+          {sizeLabel(index.receipts.reduce((sum, r) => sum + r.size, 0))} /{" "}
+          {sizeLabel(MAX_RECEIPT_STORAGE)}
+          {" · "}
+          {index.receipts.length}/{MAX_STORED_RECEIPTS} dosya. Yalnızca sen
+          erişebilirsin. İşlemi silmek, bağlı dekontları da siler. CSV/JSON
+          yedekleri PDF dosyalarını içermez.
         </Txt>
       </View>
     ),

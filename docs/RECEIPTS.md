@@ -9,7 +9,7 @@ düğmesinden erişilir. Dosya adları ve içerikleri diğer cihazlarda aynı Go
 hesabıyla giriş yapıldığında erişilebilirdir.
 
 Her PDF en fazla **3 MiB**, bir işlem en fazla **10 PDF**, her kullanıcı toplam
-**100 MiB / 1000 dosya** depolayabilir. 3 MiB sınırı base64 JSON aktarımının Vercel Function
+**3 GiB / 5000 dosya** depolayabilir. 3 MiB sınırı base64 JSON aktarımının Vercel Function
 4.5 MB istek/yanıt sınırından küçük kalmasını sağlar. PDF imzası, sonlandırıcısı,
 base64 biçimi ve gerçek bayt boyutu sunucuda kontrol edilir. Dosya uzantısını
 değiştirmek yeterli değildir. Bu temel biçim kontrolü bir zararlı yazılım taraması
@@ -22,6 +22,15 @@ tablosu oluşturur. PDF'ler MEDIUMBLOB olarak saklanır; bütçe JSON belgesine,
 localStorage'a, uygulama paketine veya herkese açık statik dosyalara konmaz.
 Yeni bir depolama hesabı, token veya ücretli servis gerektirmez. Dosya kapasitesi
 mevcut MySQL hizmetinin disk alanını kullanır.
+
+26 Ekim 2026 kontrolünde Aiven `developer-1` MySQL hizmetinin toplam diski
+8192 MiB, disk kullanım metriği yaklaşık %3,5 idi. İlk sürümün 100 MiB
+uygulama kotası 3 GiB'a yükseltildi; Aiven planı veya ücretlendirmesi değiştirilmedi.
+3 GiB kullanıcı başına uygulama kotasıdır; fiziksel 8 GiB disk bütün kullanıcılar,
+bütçe kayıtları ve MySQL sistem dosyaları arasında paylaşılır. Büyüyen kullanımda
+disk kapasitesi artırılabilir veya PDF'ler özel erişimli nesne depolamasına
+taşınabilir. Dosya sayısının 5000 ile sınırlandırılması metadata liste yanıtının
+Vercel yanıt sınırını aşmasını önler.
 
 `/api/cloud` eylemleri:
 

@@ -159,12 +159,12 @@ export class MysqlReceiptRepository {
         );
       if (Number(usage[0].used) + file.content.length > MAX_RECEIPT_STORAGE)
         throw new ReceiptError(
-          "Hesabındaki 100 MB dekont alanı doldu. Kullanmadığın dekontları kaldır.",
+          "Hesabındaki 3 GB dekont alanı doldu. Kullanmadığın dekontları kaldır.",
           409,
         );
       if (Number(usage[0].total) >= MAX_STORED_RECEIPTS)
         throw new ReceiptError(
-          "Hesap başına en fazla 1000 dekont saklanabilir. Kullanmadığın dekontları kaldır.",
+          `Hesap başına en fazla ${MAX_STORED_RECEIPTS} dekont saklanabilir. Kullanmadığın dekontları kaldır.`,
           409,
         );
       const createdAt = Date.now();
