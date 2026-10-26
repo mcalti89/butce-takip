@@ -1,0 +1,97 @@
+version: "3.8"
+services:
+  mysql-init:
+    image: alpine/openssl@sha256:85983c7fe9bfe47e0e5311b2213998558678c0c6bbb85730c1f4f46df71e62d0
+    platform: linux/arm64
+    restart: "no"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - /share/butce-veritabani/ayarlar:/settings:rw
+      - /share/butce-veritabani/veri:/existing-data:ro
+    entrypoint: ["/bin/sh"]
+    command:
+      - -ec
+      - |
+        umask 077
+        mkdir -p /settings/mysql /settings/private
+        if [ -d /existing-data/mysql ] && { [ ! -s /settings/mysql/mysql-root-password.txt ] || [ ! -s /settings/mysql/mysql-app-password.txt ] || [ ! -s /settings/mysql/ca.pem ] || [ ! -s /settings/mysql/server-key.pem ] || [ ! -s /settings/mysql/server-cert.pem ] || [ ! -s /settings/private/ca-key.pem ]; }; then
+          echo 'Existing database settings are missing; restore the private settings backup before starting.' >&2
+          exit 1
+        fi
+        if [ -s /settings/mysql/ca.pem ] && [ ! -s /settings/private/ca-key.pem ]; then
+          echo 'Private CA key missing; restore the private settings backup.' >&2
+          exit 1
+        fi
+        if [ ! -s /settings/mysql/mysql-root-password.txt ]; then openssl rand -hex 32 > /settings/mysql/mysql-root-password.txt; fi
+        if [ ! -s /settings/mysql/mysql-app-password.txt ]; then openssl rand -hex 32 > /settings/mysql/mysql-app-password.txt; fi
+        if [ ! -s /settings/private/ca-key.pem ]; then openssl genrsa -out /settings/private/ca-key.pem 2048; fi
+        if [ ! -s /settings/mysql/ca.pem ]; then
+          openssl req -new -x509 -sha256 -days 3650 -key /settings/private/ca-key.pem -out /settings/mysql/ca.pem -subj '/CN=Butce-QNAP-Private-CA' -addext 'basicConstraints=critical,CA:TRUE' -addext 'keyUsage=critical,keyCertSign,cRLSign'
+        fi
+        if [ ! -s /settings/mysql/server-key.pem ]; then openssl genrsa -out /settings/mysql/server-key.pem 2048; fi
+        if [ ! -s /settings/mysql/server-cert.pem ]; then
+          openssl req -new -key /settings/mysql/server-key.pem -out /settings/private/server.csr -subj '/CN=mysql'
+          printf '%s\n' 'basicConstraints=critical,CA:FALSE' 'keyUsage=critical,digitalSignature,keyEncipherment' 'extendedKeyUsage=serverAuth' 'subjectAltName=DNS:mysql,DNS:butce-mysql,IP:127.0.0.1' > /settings/private/server.ext
+          openssl x509 -req -sha256 -days 3650 -in /settings/private/server.csr -CA /settings/mysql/ca.pem -CAkey /settings/private/ca-key.pem -CAcreateserial -extfile /settings/private/server.ext -out /settings/mysql/server-cert.pem
+        fi
+        chown 0:999 /settings /settings/mysql /settings/mysql/mysql-root-password.txt /settings/mysql/mysql-app-password.txt
+        chmod 750 /settings /settings/mysql
+        chmod 640 /settings/mysql/mysql-root-password.txt /settings/mysql/mysql-app-password.txt
+        chown 999:999 /settings/mysql/server-key.pem
+        chmod 600 /settings/mysql/server-key.pem /settings/private/ca-key.pem
+        chmod 644 /settings/mysql/ca.pem /settings/mysql/server-cert.pem
+        echo 'Butce MySQL private credentials and TLS certificates ready.'
+  mysql:
+    image: mysql:8.4@sha256:b265fd63b9c8168801c1628b0b21e915846e81192f5a493682a1184cbd70d896
+    platform: linux/arm64
+    restart: unless-stopped
+    stop_grace_period: 60s
+    security_opt:
+      - no-new-privileges:true
+    depends_on:
+      mysql-init:
+        condition: service_completed_successfully
+    environment:
+      MYSQL_DATABASE: butce
+      MYSQL_USER: butce_app
+      MYSQL_ROOT_PASSWORD_FILE: /run/private/mysql-root-password.txt
+      MYSQL_ROOT_HOST: localhost
+      MYSQL_PASSWORD_FILE: /run/private/mysql-app-password.txt
+      TZ: UTC
+    volumes:
+      - /share/butce-veritabani/veri:/var/lib/mysql:rw
+      - /share/butce-veritabani/ayarlar/mysql:/run/private:ro
+    command:
+      - --require-secure-transport=ON
+      - --ssl-ca=/run/private/ca.pem
+      - --ssl-cert=/run/private/server-cert.pem
+      - --ssl-key=/run/private/server-key.pem
+      - --default-time-zone=+00:00
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_bin
+      - --innodb-buffer-pool-size=128M
+      - --innodb-log-buffer-size=16M
+      - --max-connections=20
+      - --table-open-cache=128
+      - --performance-schema=OFF
+      - --tmp-table-size=16M
+      - --max-heap-table-size=16M
+      - --sort-buffer-size=262144
+      - --join-buffer-size=262144
+      - --max-allowed-packet=16M
+      - --mysqlx=OFF
+      - --skip-name-resolve
+      - --binlog-expire-logs-seconds=604800
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin --protocol=socket ping --silent"]
+      interval: 15s
+      timeout: 5s
+      start_period: 180s
+      retries: 8
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
