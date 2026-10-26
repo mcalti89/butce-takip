@@ -1,0 +1,15 @@
+{
+  "version": "v1.0.0-nas-stable",
+  "sourceCommit": "28a0aa246514d23a2670b292390dd904fbada27f",
+  "productionDeployment": "dpl_9aE5JC9EqAKcekoxim2bjQ2ZV5VP",
+  "appOrigin": "https://butce.muratcalti.com",
+  "receiptOrigin": "https://dekont.muratcalti.com",
+  "databaseProvider": "Aiven MySQL",
+  "receiptStorage": "QNAP through Cloudflare Tunnel",
+  "sourceCodeIncluded": true,
+  "liveDatabaseSnapshotIncluded": false,
+  "nasPdfSnapshotIncluded": false,
+  "secretValuesIncluded": false,
+  "schemaDirectory": "database/budget",
+  "verification": {"automatedPassed": 481, "preexistingSkipped": 1}
+}
