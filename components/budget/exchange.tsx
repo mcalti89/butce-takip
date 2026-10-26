@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { useReceiptEditor } from "./receipts";
 import { View } from "react-native";
 import { useBudget } from "@/lib/budget/store";
 import {
@@ -99,6 +100,9 @@ export function ExchangeEditor({
   const [note, setNote] = useState(transfer?.note ?? "");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
+  const [entryId] = useState(() => transfer?.id ?? id());
+  const saved = useRef(!!transfer);
+  const receipts = useReceiptEditor("transfer", entryId, busy);
   const n = parseAmount(amount, source?.currency);
   const initialRate = transfer?.exchange
     ? exchangeRateInput(transfer.exchange, transfer.currency)
@@ -153,7 +157,9 @@ export function ExchangeEditor({
       );
   }
   async function save() {
+    if (busy || receipts.working) return;
     setError("");
+    let wrote = false;
     try {
       checkInputs();
       if (!preview) throw new Error("İşlemde uygulanan kuru kendin gir.");
@@ -161,12 +167,12 @@ export function ExchangeEditor({
         throw new Error("Geçerli bir saat gir. Biçim: SS:DD (00:00–23:59).");
       setBusy(true);
       await update((d) => {
-        if (transfer && !d.accountTransfers?.some((t) => t.id === transfer.id))
+        if (saved.current && !d.accountTransfers?.some((t) => t.id === entryId))
           throw new Error(
             "Bu döviz işlemi artık bulunamıyor. Son verileri yükle.",
           );
         return saveExchange(d, {
-          id: transfer?.id ?? id(),
+          id: entryId,
           fromId,
           toId,
           amount: n,
@@ -177,10 +183,17 @@ export function ExchangeEditor({
           exchange: preview,
         });
       });
+      saved.current = true;
+      wrote = true;
+      await receipts.flush();
       onDone("Döviz işlemi kaydedildi; iki hesabın bakiyesi güncellendi.");
       onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(
+        wrote
+          ? `Döviz işlemi kaydedildi, ancak dekontlar tamamlanamadı: ${(e as Error).message} Tekrar Kaydet’e basabilirsin; işlem ikinci kez eklenmez.`
+          : (e as Error).message,
+      );
     } finally {
       setBusy(false);
     }
@@ -189,7 +202,7 @@ export function ExchangeEditor({
     <Sheet
       title={transfer ? "Döviz işlemini düzenle" : "Döviz al / sat"}
       onClose={() => {
-        if (!busy) onClose();
+        if (!busy && !receipts.working) onClose();
       }}
     >
       <Txt
@@ -349,9 +362,10 @@ export function ExchangeEditor({
         editable={!busy}
       />
       <ErrorText message={error} />
+      {receipts.panel}
       <Button
         busy={busy}
-        disabled={!preview || !source || !target}
+        disabled={!preview || !source || !target || receipts.working}
         onPress={() => void save()}
       >
         Döviz işlemini kaydet

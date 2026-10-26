@@ -8,6 +8,11 @@ import {
 import { randomUUID } from "node:crypto";
 import { GoogleAccountConflict, type GoogleIdentity } from "./google";
 import { emptyData } from "../../lib/budget/model";
+import {
+  MysqlReceiptRepository,
+  lockReceiptOwner,
+  receiptTarget,
+} from "./receipts";
 import type { BudgetData } from "../../lib/budget/model";
 
 export type Account = {
@@ -19,6 +24,7 @@ export type Account = {
 export type SessionKind = "password" | "google";
 export type CloudDocument = { revision: number; data: BudgetData | null };
 export interface BudgetRepository {
+  receipts?: MysqlReceiptRepository;
   addGoogleChallenge(
     hash: string,
     nonceHash: string,
@@ -98,7 +104,10 @@ export function databaseOptions(
 }
 
 export class MysqlBudgetRepository implements BudgetRepository {
-  constructor(readonly pool: Pool) {}
+  readonly receipts: MysqlReceiptRepository;
+  constructor(readonly pool: Pool) {
+    this.receipts = new MysqlReceiptRepository(pool);
+  }
   async account(email: string): Promise<Account | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
       "SELECT id, email, password_hash FROM budget_cloud_accounts WHERE email = ?",
@@ -316,23 +325,56 @@ export class MysqlBudgetRepository implements BudgetRepository {
     data: BudgetData,
     now: number,
   ) {
-    if (revision === 0) {
-      try {
-        await this.pool.execute(
-          "INSERT INTO budget_cloud_documents (account_id,revision,document,updated_at_ms) VALUES (?,1,?,?)",
-          [accountId, JSON.stringify(data), now],
-        );
-        return 1;
-      } catch (error) {
-        if ((error as { code?: string }).code === "ER_DUP_ENTRY") return null;
-        throw error;
+    // The same owner lock serializes uploads, quota checks and document deletion.
+    // Receipt cleanup commits only with the successful document revision.
+    const connection = await this.pool.getConnection();
+    try {
+      await connection.beginTransaction();
+      await lockReceiptOwner(connection, accountId);
+      if (revision === 0) {
+        try {
+          await connection.execute(
+            "INSERT INTO budget_cloud_documents (account_id,revision,document,updated_at_ms) VALUES (?,1,?,?)",
+            [accountId, JSON.stringify(data), now],
+          );
+          await connection.commit();
+          return 1;
+        } catch (error) {
+          if ((error as { code?: string }).code === "ER_DUP_ENTRY") {
+            await connection.rollback();
+            return null;
+          }
+          throw error;
+        }
       }
+      const [result] = await connection.execute<ResultSetHeader>(
+        "UPDATE budget_cloud_documents SET document=?,revision=revision+1,updated_at_ms=? WHERE account_id=? AND revision=?",
+        [JSON.stringify(data), now, accountId, revision],
+      );
+      if (result.affectedRows !== 1) {
+        await connection.rollback();
+        return null;
+      }
+      const [files] = await connection.execute<RowDataPacket[]>(
+        "SELECT id,entry_kind,entry_id FROM budget_cloud_receipts WHERE account_id=?",
+        [accountId],
+      );
+      const removed = files.filter(
+        (f) => !receiptTarget(data, f.entry_kind, f.entry_id),
+      );
+      for (const f of removed)
+        await connection.execute(
+          "DELETE FROM budget_cloud_receipts WHERE account_id=? AND id=?",
+          [accountId, f.id],
+        );
+      await connection.commit();
+      return revision + 1;
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
     }
-    const [result] = await this.pool.execute<ResultSetHeader>(
-      "UPDATE budget_cloud_documents SET document=?,revision=revision+1,updated_at_ms=? WHERE account_id=? AND revision=?",
-      [JSON.stringify(data), now, accountId, revision],
-    );
-    return result.affectedRows === 1 ? revision + 1 : null;
   }
 }
 

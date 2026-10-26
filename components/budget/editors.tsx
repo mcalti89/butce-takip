@@ -1,8 +1,9 @@
 import { EntryTypeSelector } from "./entry-type";
+import { useReceiptEditor } from "./receipts";
 import { TransferEditor } from "./finance";
 import { CategoryManager } from "./categories";
 import { currencyDigits } from "@/lib/budget/currency";
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Pressable, View } from "react-native";
 import {
   Category,
@@ -72,6 +73,9 @@ export function TransactionEditor({
   } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [entryId] = useState(() => transaction?.id ?? id());
+  const saved = useRef(!!transaction);
+  const receipts = useReceiptEditor("transaction", entryId, busy);
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const categories = data.categories.filter((c) => c.type === type);
@@ -129,6 +133,7 @@ export function TransactionEditor({
     setCategoryId(data.categories.find((c) => c.type === next)?.id || "");
   };
   const save = async () => {
+    if (busy || receipts.working) return;
     const value = parseAmount(amount, currency);
     if (!Number.isFinite(value)) {
       setError(
@@ -156,6 +161,7 @@ export function TransactionEditor({
     }
     setBusy(true);
     setError("");
+    let wrote = false;
     try {
       const unchangedQuote =
         transaction &&
@@ -210,7 +216,7 @@ export function TransactionEditor({
           ? { planId: initial.planId, planIndex: initial.planIndex }
           : {}),
         accountId: accountId || undefined,
-        id: transaction?.id || id(),
+        id: entryId,
         type,
         amount: value,
         date,
@@ -243,7 +249,7 @@ export function TransactionEditor({
           )
         )
           throw new Error("Düzenlemeden önce bağlı hesabı arşivden çıkar.");
-        if (transaction && !d.transactions.some((t) => t.id === transaction.id))
+        if (saved.current && !d.transactions.some((t) => t.id === entryId))
           throw new Error("İşlem artık bulunamıyor; son verileri yükle.");
         if (!transaction && initial?.planId) {
           if (
@@ -254,18 +260,22 @@ export function TransactionEditor({
             d.transactions.some(
               (t) =>
                 t.planId === initial.planId &&
-                t.planIndex === initial.planIndex,
+                t.planIndex === initial.planIndex &&
+                t.id !== entryId,
             )
           )
             throw new Error("Bu dönem zaten işleme dönüştürülmüş.");
         }
         return {
           ...d,
-          transactions: transaction
+          transactions: d.transactions.some((t) => t.id === entryId)
             ? d.transactions.map((t) => (t.id === entry.id ? entry : t))
             : [...d.transactions, entry],
         };
       });
+      saved.current = true;
+      wrote = true;
+      await receipts.flush();
       onDone(
         currency === "TRY"
           ? transaction
@@ -275,7 +285,11 @@ export function TransactionEditor({
       );
       onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(
+        wrote
+          ? `İşlem kaydedildi, ancak dekont değişiklikleri tamamlanamadı: ${(e as Error).message} Yeniden Kaydet’e basabilirsin; işlem ikinci kez eklenmez.`
+          : (e as Error).message,
+      );
     } finally {
       setBusy(false);
     }
@@ -286,13 +300,16 @@ export function TransactionEditor({
         visible={!categoryManagerOpen && !transferOpen}
         title={transaction ? "İşlemi düzenle" : "Yeni işlem"}
         subtitle="Küçük kayıtlar, büyük bir netlik."
-        onClose={onClose}
+        onClose={() => {
+          if (!busy && !receipts.working) onClose();
+        }}
       >
         <EntryTypeSelector
           value={type}
           locked={!!initial?.planId}
           disableTransfer={!!transaction}
           onChange={(mode) => {
+            if (busy || receipts.working) return;
             if (mode === "transfer") setTransferOpen(true);
             else changeType(mode);
           }}
@@ -596,12 +613,19 @@ export function TransactionEditor({
           maxLength={300}
         />
         <ErrorText message={error} />
-        <Button onPress={save} busy={busy} icon="check">
+        {receipts.panel}
+        <Button
+          onPress={save}
+          busy={busy}
+          disabled={receipts.working}
+          icon="check"
+        >
           {transaction ? "Değişiklikleri kaydet" : "İşlemi kaydet"}
         </Button>
         {transaction ? (
           <Button
             kind="danger"
+            disabled={busy || receipts.working}
             onPress={() => onDelete(transaction)}
             icon="trash-2"
             style={{ marginTop: 10 }}

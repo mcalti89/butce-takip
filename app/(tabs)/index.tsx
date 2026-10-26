@@ -1488,8 +1488,8 @@ export default function BudgetApp() {
         >
           <Txt style={{ color: C.muted, marginVertical: 18 }}>
             {dialog.kind === "delete"
-              ? `${dialog.transaction.description || "Seçili işlem"} · ${money(dialog.transaction.amount)} tutarındaki kayıt hesabından silinecek.`
-              : `Bu moddaki ${data.transactions.length} işlem, özel kategoriler, bütçe limitleri ve tasarruf hedefleri kaldırılacak. Eklediğin kayıtlar varsa onlar da silinir; önce CSV dışa aktarabilirsin. CSV yalnızca işlemleri taşır.`}
+              ? `${dialog.transaction.description || "Seçili işlem"} · ${money(dialog.transaction.amount)} tutarındaki kayıt ve bağlı PDF dekontları hesabından silinecek.`
+              : `Bu moddaki ${data.transactions.length} işlem, özel kategoriler, bütçe limitleri ve tasarruf hedefleri kaldırılacak. İşlemlerle birlikte PDF dekontları da silinir; saklamak istediklerini önce indir. CSV/JSON yedekleri PDF dosyalarını içermez.`}
           </Txt>
           <ErrorText message={confirmError} />
           <Button

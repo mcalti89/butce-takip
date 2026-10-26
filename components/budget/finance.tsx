@@ -4,7 +4,8 @@ import { EntryTypeSelector } from "./entry-type";
 import { compareDatedRecordsNewestFirst } from "@/lib/budget/time";
 import { AccountActivitySheet } from "./account-activity";
 import { currencyScale } from "@/lib/budget/currency";
-import React, { useState } from "react";
+import React, { useRef, useState } from "react";
+import { useReceiptEditor } from "./receipts";
 import { Pressable, View } from "react-native";
 import { useBudget } from "@/lib/budget/store";
 import {
@@ -357,7 +358,11 @@ export function TransferEditor({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const source = accounts.find((a) => a.id === from);
+  const [entryId] = useState(() => transfer?.id ?? id());
+  const receipts = useReceiptEditor("transfer", entryId, busy);
+  const saved = useRef(!!transfer);
   async function save() {
+    if (busy || receipts.working) return;
     const n = parseAmount(value, source?.currency);
     setError("");
     if (!Number.isFinite(n) || !validDate(date) || date > today())
@@ -367,11 +372,14 @@ export function TransferEditor({
     if (time.trim() && !validTime(time.trim()))
       return setError("Geçerli bir saat gir. Biçim: SS:DD (00:00–23:59).");
     setBusy(true);
+    let wrote = false;
     try {
-      await update((d) =>
-        saveTransfer(d, {
+      await update((d) => {
+        if (saved.current && !d.accountTransfers?.some((t) => t.id === entryId))
+          throw new Error("Transfer artık bulunamıyor. Son verileri yükle.");
+        return saveTransfer(d, {
           ...(transfer ?? {}),
-          id: transfer?.id ?? id(),
+          id: entryId,
           fromId: from,
           toId: to,
           amount: n,
@@ -379,12 +387,19 @@ export function TransferEditor({
           date,
           time: time.trim() || undefined,
           note: note.trim(),
-        }),
-      );
+        });
+      });
+      saved.current = true;
+      wrote = true;
+      await receipts.flush();
       onDone("Transfer kaydedildi; gelir ve gider toplamları değişmedi.");
       onClose();
     } catch (e) {
-      setError((e as Error).message);
+      setError(
+        wrote
+          ? `Transfer kaydedildi, ancak dekontlar tamamlanamadı: ${(e as Error).message} Tekrar Kaydet’e basabilirsin; transfer ikinci kez eklenmez.`
+          : (e as Error).message,
+      );
     } finally {
       setBusy(false);
     }
@@ -393,14 +408,15 @@ export function TransferEditor({
     <Sheet
       title={transfer ? "Transferi düzenle" : "Transfer / kart ödemesi"}
       onClose={() => {
-        if (!busy) onClose();
+        if (!busy && !receipts.working) onClose();
       }}
     >
       {onTypeChange ? (
         <EntryTypeSelector
           value="transfer"
           onChange={(type) => {
-            if (type !== "transfer") onTypeChange(type);
+            if (!busy && !receipts.working && type !== "transfer")
+              onTypeChange(type);
           }}
         />
       ) : null}
@@ -463,8 +479,13 @@ export function TransferEditor({
         autoCorrect={false}
       />
       <Field label="Not" value={note} onChangeText={setNote} maxLength={300} />
+      {receipts.panel}
       <ErrorText message={error} />
-      <Button busy={busy} disabled={!from || !to} onPress={() => void save()}>
+      <Button
+        busy={busy}
+        disabled={!from || !to || receipts.working}
+        onPress={() => void save()}
+      >
         Transferi kaydet
       </Button>
     </Sheet>
@@ -1136,7 +1157,8 @@ export function AccountsDashboard({
         >
           <Caption>
             İki hesabın bakiyesi yeniden hesaplanır. Gelir ve gider kayıtları
-            değişmez.
+            değişmez. Bu transfere bağlı PDF dekontları da silinir; saklamak
+            istediklerini önce indir.
           </Caption>
           <ErrorText message={error} />
           <Button

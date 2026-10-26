@@ -1,4 +1,5 @@
 import { activityRows } from "@/lib/budget/activity";
+import { useReceiptCount } from "@/lib/budget/receipts";
 import type { AccountTransfer, FinancialAccount } from "@/lib/budget/finance";
 import React from "react";
 import { Pressable, View } from "react-native";
@@ -283,6 +284,7 @@ export function TransactionRows({
   onPress: (t: Transaction) => void;
   limit?: number;
 }) {
+  const receiptCount = useReceiptCount();
   const rows = activityRows(transactions, transfers);
   if (!rows.length)
     return (
@@ -358,6 +360,11 @@ export function TransactionRows({
                 <Txt style={{ color: C.blue, fontSize: 10 }}>
                   {t.exchange ? "Döviz al / sat" : "Transfer"}
                 </Txt>
+                {receiptCount("transfer", t.id) > 0 ? (
+                  <Txt style={{ color: C.blue, fontSize: 10 }}>
+                    📎 {receiptCount("transfer", t.id)} dekont
+                  </Txt>
+                ) : null}
               </View>
               <Icon name="chevron-right" size={13} color={C.dim} />
             </Pressable>
@@ -432,6 +439,11 @@ export function TransactionRows({
                   }}
                 >
                   ≈ {money(t.baseAmount ?? 0)} · {t.fxDate || "kur yok"}
+                </Txt>
+              ) : null}
+              {receiptCount("transaction", t.id) > 0 ? (
+                <Txt style={{ color: C.blue, fontSize: 10 }}>
+                  📎 {receiptCount("transaction", t.id)} dekont
                 </Txt>
               ) : null}
             </View>

@@ -1,4 +1,5 @@
 import { validInvestmentChanges } from "./investments";
+import { parseReceipt, ReceiptError } from "./receipts";
 import express, { type Request, type Response } from "express";
 import { parse as parseCookies } from "cookie";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -293,6 +294,60 @@ export function createBudgetApp(options: Options = {}) {
         res.clearCookie(cookieName, cookies);
         return res.json({ ok: true });
       }
+      if (
+        [
+          "receipts",
+          "receipt-download",
+          "receipt-upload",
+          "receipt-delete",
+        ].includes(action)
+      ) {
+        const expected =
+          req.method === "POST" ? req.body?.accountId : req.query.accountId;
+        if (expected !== account.id)
+          return res
+            .status(409)
+            .json({
+              code: "ACCOUNT_CHANGED",
+              error: "Açık hesap değişti. Sayfayı yenile.",
+            });
+        if (!db.receipts)
+          return res
+            .status(503)
+            .json({ error: "Dekont alanına şu anda ulaşılamıyor." });
+        if (action === "receipts" && req.method === "GET") {
+          const receipts = await db.receipts.list(account.id);
+          return res.json({ accountId: account.id, receipts });
+        }
+        if (action === "receipt-upload" && req.method === "POST") {
+          const receipt = await db.receipts.upload(
+            account.id,
+            parseReceipt(req.body),
+          );
+          return res.json({ accountId: account.id, receipt });
+        }
+        const fileId = req.method === "POST" ? req.body?.id : req.query.id;
+        if (typeof fileId !== "string" || !/^[a-f0-9-]{36}$/.test(fileId))
+          return res.status(400).json({ error: "Geçerli bir dekont seç." });
+        if (action === "receipt-download" && req.method === "GET") {
+          const file = await db.receipts.get(account.id, fileId);
+          if (!file)
+            return res.status(404).json({ error: "Dekont bulunamadı." });
+          res.set({
+            "Content-Type": "application/pdf",
+            "Content-Disposition": `attachment; filename="dekont.pdf"; filename*=UTF-8''${encodeURIComponent(file.receipt.name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16)}`)}`,
+            "Content-Security-Policy": "sandbox; default-src 'none'",
+            "Cross-Origin-Resource-Policy": "same-origin",
+            "X-Budget-Account": account.id,
+          });
+          return res.send(file.content);
+        }
+        if (action === "receipt-delete" && req.method === "POST") {
+          await db.receipts.remove(account.id, fileId);
+          return res.json({ accountId: account.id, ok: true });
+        }
+        return res.status(405).json({ error: "Bu yöntem desteklenmiyor." });
+      }
       if (action === "data" && req.method === "GET")
         return res.json({
           accountId: account.id,
@@ -365,7 +420,9 @@ export function createBudgetApp(options: Options = {}) {
         return res.json({ accountId: account.id, revision: next });
       }
       return res.status(404).json({ error: "İşlem bulunamadı." });
-    } catch {
+    } catch (error) {
+      if (error instanceof ReceiptError)
+        return res.status(error.status).json({ error: error.message });
       return res.status(503).json({
         error:
           "Hesap hizmetine ulaşılamadı. Kayıt başarılı olarak gösterilmedi; bağlantını kontrol et.",

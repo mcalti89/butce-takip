@@ -1,5 +1,6 @@
 import type { BudgetData } from "./model";
 import { validateData } from "./model";
+import type { PickedReceipt, Receipt, ReceiptKind } from "./receipt-model";
 export type CloudStatus = {
   enabled: boolean;
   googleEnabled: boolean;
@@ -37,7 +38,11 @@ async function request<T>(action: string, body?: unknown): Promise<T> {
   const controller = new AbortController();
   const timeout = setTimeout(
     () => controller.abort(),
-    action === "google-login" ? 20000 : 10000,
+    action === "receipt-upload"
+      ? 30000
+      : action === "google-login"
+        ? 20000
+        : 10000,
   );
   try {
     const response = await fetch(endpoint(action), {
@@ -75,6 +80,82 @@ export const googleConfig = () =>
 export const cloudGoogleLogin = (credential: string) =>
   request<CloudStatus>("google-login", { credential });
 export const cloudLogout = () => request<{ ok: boolean }>("logout", {});
+function checkReceiptAccount<T extends { accountId: string }>(
+  result: T,
+  accountId: string,
+): T {
+  if (result.accountId !== accountId)
+    throw new CloudError(
+      "Açık hesap değişti. Sayfayı yenile.",
+      409,
+      "ACCOUNT_CHANGED",
+    );
+  return result;
+}
+export async function cloudReceipts(accountId: string) {
+  const result = await request<{ accountId: string; receipts: Receipt[] }>(
+    `receipts&accountId=${encodeURIComponent(accountId)}`,
+  );
+  return checkReceiptAccount(result, accountId).receipts;
+}
+export async function cloudUploadReceipt(
+  accountId: string,
+  kind: ReceiptKind,
+  entryId: string,
+  file: PickedReceipt,
+) {
+  const result = await request<{ accountId: string; receipt: Receipt }>(
+    "receipt-upload",
+    { accountId, kind, entryId, ...file },
+  );
+  return checkReceiptAccount(result, accountId).receipt;
+}
+export async function cloudDeleteReceipt(accountId: string, id: string) {
+  return checkReceiptAccount(
+    await request<{ accountId: string; ok: boolean }>("receipt-delete", {
+      accountId,
+      id,
+    }),
+    accountId,
+  );
+}
+export async function cloudDownloadReceipt(accountId: string, id: string) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 30000);
+  try {
+    const response = await fetch(
+      endpoint(
+        `receipt-download&accountId=${encodeURIComponent(accountId)}&id=${encodeURIComponent(id)}`,
+      ),
+      { credentials: "include", cache: "no-store", signal: controller.signal },
+    );
+    if (!response.ok) {
+      const error = await response.json().catch(() => null);
+      throw new CloudError(
+        error?.error ?? "Dekont indirilemedi.",
+        response.status,
+      );
+    }
+    if (
+      response.headers.get("X-Budget-Account") !== accountId ||
+      !response.headers.get("content-type")?.startsWith("application/pdf")
+    )
+      throw new CloudError(
+        "Dekont oturumu doğrulanamadı. Sayfayı yenile.",
+        409,
+        "ACCOUNT_CHANGED",
+      );
+    return new Uint8Array(await response.arrayBuffer());
+  } catch (e) {
+    if (e instanceof CloudError) throw e;
+    throw new CloudError(
+      "Dekont indirilemedi. Bağlantını kontrol edip tekrar dene.",
+      0,
+    );
+  } finally {
+    clearTimeout(timeout);
+  }
+}
 export async function cloudRead(accountId: string): Promise<CloudSnapshot> {
   const snapshot = await request<CloudSnapshot>("data");
   if (snapshot.accountId !== accountId)

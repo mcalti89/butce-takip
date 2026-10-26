@@ -332,6 +332,71 @@ export async function verifyGoogleDeployment() {
         )
       ).status === 409,
     );
+    stage = "özel PDF dekont alanı";
+    const receiptId = randomUUID();
+    const pdf = Buffer.from(
+      "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n",
+    );
+    const upload = {
+      accountId: a.accountId,
+      id: receiptId,
+      kind: "transfer",
+      entryId: "smoke-transfer",
+      name: "Synthetic bank receipt.pdf",
+      base64: pdf.toString("base64"),
+    };
+    check((await request("receipt-upload", upload, a.cookie)).status === 200);
+    check((await request("receipt-upload", upload, a.cookie)).status === 200);
+    const files = await (
+      await request(`receipts&accountId=${a.accountId}`, undefined, a.cookie)
+    ).json();
+    check(files.receipts.length === 1 && files.receipts[0].size === pdf.length);
+    const download = await request(
+      `receipt-download&accountId=${a.accountId}&id=${receiptId}`,
+      undefined,
+      a.cookie,
+    );
+    check(
+      download.status === 200 &&
+        Buffer.from(await download.arrayBuffer()).equals(pdf),
+    );
+    check(
+      download.headers.get("cache-control") === "no-store" &&
+        download.headers
+          .get("content-disposition")
+          ?.startsWith("attachment;") === true,
+    );
+    check(
+      (
+        await request(
+          `receipt-download&accountId=${b.accountId}&id=${receiptId}`,
+          undefined,
+          b.cookie,
+        )
+      ).status === 404,
+    );
+    check((await request(`receipts&accountId=${a.accountId}`)).status === 401);
+    check(
+      (
+        await request(
+          "receipt-delete",
+          { accountId: a.accountId, id: receiptId },
+          a.cookie,
+        )
+      ).status === 200,
+    );
+    check(
+      (
+        await request(
+          `receipt-download&accountId=${a.accountId}&id=${receiptId}`,
+          undefined,
+          a.cookie,
+        )
+      ).status === 404,
+    );
+    console.log(
+      "PDF dekont SQL yayın kontrolü başarılı; yükleme, özel indirme, tekrar güvenliği ve kullanıcı ayrımı doğrulandı.",
+    );
     const writes = await Promise.all([
       request("data", { accountId: a.accountId, revision: 2, data }, a.cookie),
       request("data", { accountId: a.accountId, revision: 2, data }, a.cookie),

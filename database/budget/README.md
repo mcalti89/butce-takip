@@ -112,3 +112,7 @@ ham MySQL TCP parolası değildir; Production ayarları güvenli Vercel ortamın
 ayrı tutar. `fx_bulletins`, `fx_daily_rates`, `fx_unpublished_days`,
 `fx_sync_state` tablolarını kurar. Kur geçmişi kullanıcı bütçe belgelerine otomatik
 yazılmaz. [TCMB arşivi ve cron](../../docs/TCMB-ARCHIVE.md) belgesine bakın.
+
+`004-receipts.sql` kullanıcıya özel PDF dekontlarını ayrı bir MEDIUMBLOB
+tablosunda saklar. Taşıma ve tam yedekleme bu tabloyu da kapsamalıdır.
+[Dekont saklama ve erişim](../../docs/RECEIPTS.md) belgesine bakın.

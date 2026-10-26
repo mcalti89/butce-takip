@@ -1202,6 +1202,332 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
         (await (await call("data", undefined, other.cookie)).json()).data,
       ).toEqual(emptyData());
     });
+    describe("Hesaba özel bulut PDF dekontları", () => {
+      const pdf = Buffer.from(
+        "%PDF-1.4\n1 0 obj\n<< /Type /Catalog >>\nendobj\n%%EOF\n",
+      );
+      async function fixture() {
+        const suffix = randomUUID();
+        const user = await login(
+          `receipt-${suffix}`,
+          `receipt-${suffix}@gmail.com`,
+        );
+        const doc = emptyData();
+        doc.transactions.push({
+          id: "receipt-expense",
+          type: "expense",
+          amount: 25,
+          currency: "TRY",
+          date: "2026-10-01",
+          categoryId: doc.categories.find((c) => c.type === "expense")!.id,
+          description: "Dekontlu işlem",
+        });
+        doc.financialAccounts = [
+          {
+            id: "bank-a",
+            name: "A",
+            kind: "bank",
+            currency: "TRY",
+            openingBalance: 100,
+            openingDate: "2026-10-01",
+            archived: false,
+          },
+          {
+            id: "bank-b",
+            name: "B",
+            kind: "bank",
+            currency: "TRY",
+            openingBalance: 0,
+            openingDate: "2026-10-01",
+            archived: false,
+          },
+        ];
+        doc.accountTransfers = [
+          {
+            id: "receipt-transfer",
+            fromId: "bank-a",
+            toId: "bank-b",
+            amount: 10,
+            currency: "TRY",
+            date: "2026-10-02",
+            note: "Transfer",
+          },
+        ];
+        expect(await repository.write(user.accountId, 1, doc, Date.now())).toBe(
+          2,
+        );
+        const body = {
+          accountId: user.accountId,
+          id: randomUUID(),
+          kind: "transaction",
+          entryId: "receipt-expense",
+          name: "İş Bankası — dekont.pdf",
+          base64: pdf.toString("base64"),
+        };
+        const list = () =>
+          call(`receipts&accountId=${user.accountId}`, undefined, user.cookie);
+        const download = (
+          id = body.id,
+          auth = user.cookie,
+          accountId = user.accountId,
+        ) =>
+          call(
+            `receipt-download&accountId=${accountId}&id=${id}`,
+            undefined,
+            auth,
+          );
+        return { user, doc, body, list, download };
+      }
+      it("oturum, beklenen hesap ve istek kaynağı doğrulamasını zorunlu tutar", async () => {
+        const f = await fixture();
+        expect(
+          (await call(`receipts&accountId=${f.user.accountId}`)).status,
+        ).toBe(401);
+        expect((await call("receipt-upload", f.body)).status).toBe(401);
+        expect(
+          (
+            await call(
+              "receipt-upload",
+              f.body,
+              f.user.cookie,
+              "https://foreign.example",
+            )
+          ).status,
+        ).toBe(403);
+        expect(
+          (
+            await call(
+              "receipt-upload",
+              { ...f.body, accountId: bob.accountId },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(409);
+        expect(
+          (await f.download(f.body.id, f.user.cookie, bob.accountId)).status,
+        ).toBe(409);
+      });
+      it("PDF’yi SQL’de saklar, başka cihaz oturumundan kayıpsız indirir ve yeniden yüklemeyi çoğaltmaz", async () => {
+        const f = await fixture();
+        const first = await call("receipt-upload", f.body, f.user.cookie);
+        expect(first.status).toBe(200);
+        expect((await first.json()).receipt).toMatchObject({
+          id: f.body.id,
+          name: f.body.name,
+          size: pdf.length,
+        });
+        expect(
+          (await call("receipt-upload", f.body, f.user.cookie)).status,
+        ).toBe(200);
+        const list = await (await f.list()).json();
+        expect(list.receipts).toHaveLength(1);
+        expect(list.receipts[0].content).toBeUndefined();
+        // A second real session for the same existing Google identity is equivalent to another device.
+        const token = randomUUID();
+        await repository.createSession(
+          tokenHash(token),
+          f.user.accountId,
+          Date.now() + 60000,
+          "google",
+        );
+        const result = await f.download(
+          f.body.id,
+          `__Host-budget_google_session=${token}`,
+        );
+        expect(result.status).toBe(200);
+        expect(Buffer.from(await result.arrayBuffer())).toEqual(pdf);
+        expect(result.headers.get("content-type")).toContain("application/pdf");
+        expect(result.headers.get("content-disposition")).toContain(
+          "attachment;",
+        );
+        expect(result.headers.get("content-disposition")).toContain(
+          encodeURIComponent(f.body.name),
+        );
+        expect(result.headers.get("x-content-type-options")).toBe("nosniff");
+        expect(result.headers.get("cache-control")).toBe("no-store");
+        expect(result.headers.get("content-security-policy")).toContain(
+          "sandbox",
+        );
+        expect(
+          (
+            await call(
+              "receipt-upload",
+              { ...f.body, name: "changed.pdf" },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(409);
+      });
+      it("başka kullanıcı dosyayı göremez, indiremez, silemez veya aynı kimlikle değiştiremez", async () => {
+        const a = await fixture(),
+          b = await fixture();
+        expect(
+          (await call("receipt-upload", a.body, a.user.cookie)).status,
+        ).toBe(200);
+        expect((await (await b.list()).json()).receipts).toEqual([]);
+        expect((await b.download(a.body.id)).status).toBe(404);
+        expect(
+          (
+            await call(
+              "receipt-delete",
+              { accountId: b.user.accountId, id: a.body.id },
+              b.user.cookie,
+            )
+          ).status,
+        ).toBe(200);
+        expect((await a.download()).status).toBe(200);
+        expect(
+          (
+            await call(
+              "receipt-upload",
+              { ...b.body, id: a.body.id },
+              b.user.cookie,
+            )
+          ).status,
+        ).toBe(409);
+      });
+      it("olmayan işleme ve PDF olmayan içeriğe dosya yazmaz", async () => {
+        const f = await fixture();
+        expect(
+          (
+            await call(
+              "receipt-upload",
+              { ...f.body, entryId: "deleted" },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(409);
+        expect(
+          (
+            await call(
+              "receipt-upload",
+              { ...f.body, base64: Buffer.from("fake pdf").toString("base64") },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(400);
+        expect((await (await f.list()).json()).receipts).toHaveLength(0);
+      });
+      it("eşzamanlı yüklemelerde işlem başına 10 dosya sınırı aşılmaz", async () => {
+        const f = await fixture();
+        const responses = await Promise.all(
+          Array.from({ length: 11 }, () =>
+            call(
+              "receipt-upload",
+              { ...f.body, id: randomUUID() },
+              f.user.cookie,
+            ),
+          ),
+        );
+        expect(responses.filter((r) => r.status === 200)).toHaveLength(10);
+        expect(responses.filter((r) => r.status === 409)).toHaveLength(1);
+        expect((await (await f.list()).json()).receipts).toHaveLength(10);
+      });
+      it("100 MB kullanıcı kotasını denetler, başka kullanıcının kotasını etkilemez", async () => {
+        const f = await fixture(),
+          other = await fixture();
+        expect(
+          (await call("receipt-upload", f.body, f.user.cookie)).status,
+        ).toBe(200);
+        await pool.execute(
+          "UPDATE budget_cloud_receipts SET byte_size=? WHERE account_id=? AND id=?",
+          [100 * 1024 * 1024 - pdf.length, f.user.accountId, f.body.id],
+        );
+        expect(
+          (
+            await call(
+              "receipt-upload",
+              { ...f.body, id: randomUUID() },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(200);
+        expect(
+          (
+            await call(
+              "receipt-upload",
+              { ...f.body, id: randomUUID() },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(409);
+        expect(
+          (await call("receipt-upload", other.body, other.user.cookie)).status,
+        ).toBe(200);
+      });
+      it("gelir gider ve transfer dosyalarını ayırır; dosya silmek bütçe sürümünü değiştirmez", async () => {
+        const f = await fixture();
+        expect(
+          (await call("receipt-upload", f.body, f.user.cookie)).status,
+        ).toBe(200);
+        const transfer = {
+          ...f.body,
+          id: randomUUID(),
+          kind: "transfer",
+          entryId: "receipt-transfer",
+        };
+        expect(
+          (await call("receipt-upload", transfer, f.user.cookie)).status,
+        ).toBe(200);
+        expect((await (await f.list()).json()).receipts).toHaveLength(2);
+        expect(
+          (
+            await call(
+              "receipt-delete",
+              { accountId: f.user.accountId, id: f.body.id },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(200);
+        expect((await f.download()).status).toBe(404);
+        expect((await f.download(transfer.id)).status).toBe(200);
+        expect((await repository.read(f.user.accountId)).revision).toBe(2);
+      });
+      it("başarısız bütçe kaydında PDF’yi korur; işlem silindiğinde dosyayı aynı SQL işlemiyle siler", async () => {
+        const f = await fixture();
+        await call("receipt-upload", f.body, f.user.cookie);
+        const next = { ...f.doc, transactions: [] };
+        expect(
+          (
+            await call(
+              "data",
+              { accountId: f.user.accountId, revision: 1, data: next },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(409);
+        expect((await f.download()).status).toBe(200);
+        expect(
+          (
+            await call(
+              "data",
+              { accountId: f.user.accountId, revision: 2, data: next },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(200);
+        expect((await f.download()).status).toBe(404);
+        expect((await (await f.list()).json()).receipts).toEqual([]);
+      });
+      it("işlem silme ve PDF yükleme yarışında sahipsiz dosya bırakmaz", async () => {
+        const f = await fixture();
+        const [upload, save] = await Promise.all([
+          call("receipt-upload", f.body, f.user.cookie),
+          call(
+            "data",
+            {
+              accountId: f.user.accountId,
+              revision: 2,
+              data: { ...f.doc, transactions: [] },
+            },
+            f.user.cookie,
+          ),
+        ]);
+        expect([200, 409]).toContain(upload.status);
+        expect(save.status).toBe(200);
+        expect((await (await f.list()).json()).receipts).toHaveLength(0);
+      });
+    });
     it("çıkış yalnızca ilgili oturumu kapatır", async () => {
       expect((await call("logout", {}, bob.cookie)).status).toBe(200);
       expect((await call("data", undefined, bob.cookie)).status).toBe(401);
