@@ -1,0 +1,61 @@
+version: "3.8"
+services:
+  dekont-api:
+    image: node:22-alpine@sha256:fd4a97c1630a4a0a70117dd7b393e322db316d0489bdf36a0e776e7b235341b0
+    platform: linux/arm64
+    restart: unless-stopped
+    init: true
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    mem_limit: 256m
+    cpus: "1.0"
+    pids_limit: 64
+    environment:
+      NODE_ENV: production
+      NODE_OPTIONS: --max-old-space-size=128
+      RECEIPT_DATA_DIR: /data
+      RECEIPT_CONFIG_DIR: /config
+      PORT: "8787"
+    volumes:
+      - /share/butce-dekont/uygulama:/config:rw
+      - /share/butce-dekont/dosyalar:/data:rw
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,nodev,size=32m
+    command:
+      - node
+      - -e
+      - |
+        const fs = require('node:fs/promises');
+        const crypto = require('node:crypto');
+        (async () => {
+          const file = '/config/receipt-server.mjs';
+          const expected = '93fa262fee1c022ed1618bf167377845a48614c81e7928cdcba5f911180417ae';
+          const valid = code => crypto.createHash('sha256').update(code).digest('hex') === expected;
+          let code = await fs.readFile(file).catch(() => null);
+          if (!code || !valid(code)) {
+            const response = await fetch('https://raw.githubusercontent.com/mcalti89/butce-takip/a06000a5ff25120144687acb4a981835338eb7e3/deploy/qnap/server.mjs', { signal: AbortSignal.timeout(30000) });
+            if (!response.ok) throw new Error('Source download failed');
+            code = Buffer.from(await response.arrayBuffer());
+            if (!valid(code)) throw new Error('Source verification failed');
+            await fs.writeFile(file, code, { mode: 384 });
+          }
+          const service = await import('file://' + file);
+          await service.start();
+        })().catch(error => {
+          console.error('Dekont service startup failed: ' + (error.code || 'STARTUP_ERROR'));
+          process.exit(1);
+        });
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 90s
+      retries: 3
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
