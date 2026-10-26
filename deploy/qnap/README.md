@@ -96,3 +96,64 @@ karşı özel klasörlerin bağımsız yedeği ayrıca tutulmalıdır.
 Testler: `pnpm run test tests/nas-receipts.test.mjs --maxWorkers=1 --minWorkers=1`.
 ARM64 imajının platform desteği registry manifestinden kontrol edilmiştir;
 QNAP donanımı üzerinde fiili başlatma kullanıcı tarafından yapılacaktır.
+
+## Cloudflare Tunnel kapsayıcısını ekleme
+
+Cloudflare'de `butce-nas` adlı uzaktan yönetilen Cloudflared tüneli oluşturulur.
+Docker kurulum ekranındaki komutun `--token` parametresinin değeri gizlidir;
+komutun tamamı veya ekran görüntüsü sohbette paylaşılmamalıdır.
+
+1. Komutu kendi bilgisayarınızda bir metin düzenleyiciye kopyalayın. Yalnızca
+   `--token` sonrasındaki uzun değeri, çevreleyen tırnaklar olmadan ayırın.
+   Komutun `docker run ... --token` kısmını silin.
+2. Token'ı tek satır, UTF-8 (BOM olmadan) olarak `cloudflare-token.txt` adıyla
+   kaydedin. File Station ile `butce-dekont/uygulama` klasörüne yükleyin.
+   Dosya adının `.txt.txt` olmadığını kontrol edin. Klasör özel kalmalıdır.
+   Mevcut `service-key.txt` dosyasını değiştirmeyin; iki anahtar farklıdır.
+3. Container Station → Applications → `butce-dekont` → Edit/Recreate YAML
+   ekranını açın. `compose-with-tunnel.yaml` içeriğiyle yapılandırmayı değiştirin.
+   Aynı uygulama adı ve aynı iki NAS dizini korunur. Uygulamayı silmek veya
+   depolama klasörlerini temizlemek gerekmez.
+4. Advanced Settings → Resources içinde bellek sınırını kapsayıcı başına
+   256 MB tutun; CPU Unlimited kalabilir. Default Web URL Port kapalı kalsın.
+   Validate ve Apply/Update/Create ile uygulayın.
+5. İki kapsayıcı (`dekont-api`, `cloudflared`) Running olmalı. Tünel sağlığı
+   bağlantı kurulduktan sonra Healthy olur. Cloudflare'de Connection Status
+   Connected/Healthy görünür. Token hatası varsa yalnızca hata metnini paylaşın;
+   token veya tam kurulum komutunu paylaşmayın.
+
+Tünel imajının ARM64 manifesti sabit SHA-256 digest ile seçilmiştir. `--token-file`
+ve `tunnel ready` komutları resmi imajın CLI'sında doğrulanmıştır. Token yalnızca
+cloudflared kapsayıcısına salt okunur dosya olarak bağlanır; Compose dosyasında,
+komut satırında, web paketinde veya GitHub'da yer almaz. Kapsayıcı, QNAP'ın
+paylaşım izinleriyle uyum için UID/GID 0 kullanır; Linux yetenekleri kapalıdır.
+Token dosyası NAS paylaşım izinleri ve dosya izinleriyle kapsayıcıdan okunabilir
+olmalıdır. Token mount'u dosya olmalıdır; dosya yüklenmeden uygulama başlatılırsa
+Docker o isimde dizin oluşturabilir. Böyle bir durumda o **boş dizin** kaldırılır,
+gerçek token dosyası yüklenir ve uygulama yeniden başlatılır.
+
+Yayımlanan NAS portu yoktur. Dış bağlantı HTTP/2 ile outbound TCP 7844 kullanır;
+bu bir modem port yönlendirmesi değildir. Sağlık kontrolü localhost:2000 üzerinden
+çalışır; metrics portu dışarıya açılmaz. Hiçbir `network_mode: host`, `privileged`
+veya Docker socket mount'u kullanılmaz. Tünel API ile aynı Compose ağına katılır.
+
+### Kalıcı hostname rotası
+
+Cloudflare tünelinin Published application routes / Public hostnames bölümünde:
+
+| Alan | Değer |
+|---|---|
+| Subdomain | `dekont` |
+| Domain | `muratcalti.com` |
+| Path | Boş |
+| Service Type | HTTP |
+| Service URL | `dekont-api:8787` |
+
+Bu URL tünelin Docker ağı içinde eriştiği origin adresidir. Public adres
+`https://dekont.muratcalti.com` olur. QNAP IP'si, QTS yönetim portu veya metrics
+portu origin olarak girilmez. İmzasız dosya istekleri NAS servisi tarafından
+401 ile reddedilmeye devam eder; `/health` yalnızca sağlık durumunu döndürür.
+
+Tünel ve hostname hazır olduğunda HTTPS `/health` ve anonim dosya erişim engeli
+kontrol edilir. Vercel NAS adapter'ı ve doğrulanmış aktarım ayrıca tamamlanmadan
+bütçe uygulamasının SQL depolaması değiştirilmez.
