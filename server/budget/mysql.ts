@@ -362,10 +362,10 @@ export class MysqlBudgetRepository implements BudgetRepository {
       const removed = files.filter(
         (f) => !receiptTarget(data, f.entry_kind, f.entry_id),
       );
-      for (const f of removed)
+      if (removed.length)
         await connection.execute(
-          "DELETE FROM budget_cloud_receipts WHERE account_id=? AND id=?",
-          [accountId, f.id],
+          `DELETE FROM budget_cloud_receipts WHERE account_id=? AND id IN (${removed.map(() => "?").join(",")})`,
+          [accountId, ...removed.map((f) => f.id)],
         );
       await connection.commit();
       return revision + 1;

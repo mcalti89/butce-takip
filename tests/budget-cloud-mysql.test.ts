@@ -1486,6 +1486,19 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
       it("başarısız bütçe kaydında PDF’yi korur; işlem silindiğinde dosyayı aynı SQL işlemiyle siler", async () => {
         const f = await fixture();
         await call("receipt-upload", f.body, f.user.cookie);
+        const extra = { ...f.body, id: randomUUID() };
+        const transfer = {
+          ...f.body,
+          id: randomUUID(),
+          kind: "transfer",
+          entryId: "receipt-transfer",
+        };
+        expect(
+          (await call("receipt-upload", extra, f.user.cookie)).status,
+        ).toBe(200);
+        expect(
+          (await call("receipt-upload", transfer, f.user.cookie)).status,
+        ).toBe(200);
         const next = { ...f.doc, transactions: [] };
         expect(
           (
@@ -1507,6 +1520,22 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
           ).status,
         ).toBe(200);
         expect((await f.download()).status).toBe(404);
+        expect((await f.download(extra.id)).status).toBe(404);
+        expect((await f.download(transfer.id)).status).toBe(200);
+        expect(
+          (await (await f.list()).json()).receipts.map(
+            (r: { id: string }) => r.id,
+          ),
+        ).toEqual([transfer.id]);
+        expect(
+          (
+            await call(
+              "data",
+              { accountId: f.user.accountId, revision: 3, data: emptyData() },
+              f.user.cookie,
+            )
+          ).status,
+        ).toBe(200);
         expect((await (await f.list()).json()).receipts).toEqual([]);
       });
       it("işlem silme ve PDF yükleme yarışında sahipsiz dosya bırakmaz", async () => {

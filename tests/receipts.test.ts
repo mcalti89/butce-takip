@@ -48,6 +48,7 @@ describe("PDF dekont doğrulama", () => {
       expect(() => parseReceipt({ ...file(), base64 })).toThrow();
     for (const value of [
       { kind: "investment" },
+      { kind: ["transaction"] },
       { entryId: "../../other" },
       { id: "not-an-id" },
       null,

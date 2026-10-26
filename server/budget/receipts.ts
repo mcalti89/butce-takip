@@ -33,7 +33,8 @@ export function parseReceipt(value: unknown) {
     !v ||
     typeof v.id !== "string" ||
     !/^[a-f0-9-]{36}$/.test(v.id) ||
-    !["transaction", "transfer"].includes(String(v.kind)) ||
+    typeof v.kind !== "string" ||
+    !["transaction", "transfer"].includes(v.kind) ||
     typeof v.entryId !== "string" ||
     !/^[A-Za-z0-9_-]{1,100}$/.test(v.entryId) ||
     typeof v.name !== "string" ||
