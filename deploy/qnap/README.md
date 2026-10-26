@@ -18,7 +18,12 @@ Container Station → Applications → Create Application:
 1. Adı `butce-dekont` yapın.
 2. `compose.yaml` dosyasının içeriğini YAML alanına yapıştırın veya Upload → Local
    Computer ile yükleyin.
-3. Validate ile doğrulayın ve Create seçin. İlk açılışta imaj ve servis indirilir.
+3. Advanced Settings → Resources bölümünde bellek sınırını 256 MB yapın. CPU
+   sınırı ilk kurulumda Unlimited kalabilir. Default Web URL Port kapalı kalmalıdır.
+   Container Station kaynak sınırlamalarını kendi arayüzünden yönetir; YAML
+   içinde `mem_limit`, `cpus`, `pids_limit` veya `deploy.resources` eklemeyin.
+   Aksi halde “Incompatible Docker Compose YAML File — Resources” uyarısı çıkar.
+   Validate ile doğrulayın ve Create seçin. İlk açılışta imaj ve servis indirilir.
 4. `dekont-api` servisi Running ve ardından Healthy olmalı. Logs içinde
    `Butce NAS receipt service ready` yazısı görünür.
 5. File Station'da `uygulama/service-key.txt` oluşur. **Bu dosyanın içeriğini
@@ -34,7 +39,8 @@ kontrolüyle yapılır. İndirme veya doğrulama başarısızsa bilinmeyen kod �
 İlk kurulumda internet erişimi gerekir. Modem portu, FTP, SSH, UPnP veya NAS
 uzaktan yönetim ekranı açılmaz. Compose dosyasında yayımlanan host portu yoktur.
 Sağlık kontrolü kapsayıcı içindeki localhost üzerinden çalışır. Konteynerin
-256 MiB RAM, 1 CPU ve 64 işlem sınırı vardır; tüm Linux yetenekleri kapalıdır.
+256 MB bellek sınırı QNAP Resources arayüzünden ayarlanır. Node.js heap sınırı
+YAML içinde 128 MiB olarak kalır; tüm Linux yetenekleri kapalıdır.
 Ana dosya sistemi salt okunur, yalnızca `/config`, `/data` ve geçici `/tmp`
 yazılabilir. QNAP'ın başka paylaşımı, Docker socket'i veya host ağı bağlanmaz.
 
