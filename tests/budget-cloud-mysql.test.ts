@@ -80,6 +80,7 @@ describe.skipIf(!databaseUrl)("Gerçek MySQL üzerinde SQL API", () => {
         .filter((s) => s.trim()))
         await pool.query(statement);
     }
+    await pool.query("DELETE FROM budget_cloud_receipt_nas_deletions");
     await pool.query("DELETE FROM budget_cloud_google_challenges");
     await pool.query("DELETE FROM budget_cloud_accounts");
     await pool.query("DELETE FROM budget_cloud_login_limits");

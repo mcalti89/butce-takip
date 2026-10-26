@@ -157,3 +157,6 @@ portu origin olarak girilmez. İmzasız dosya istekleri NAS servisi tarafından
 Tünel ve hostname hazır olduğunda HTTPS `/health` ve anonim dosya erişim engeli
 kontrol edilir. Vercel NAS adapter'ı ve doğrulanmış aktarım ayrıca tamamlanmadan
 bütçe uygulamasının SQL depolaması değiştirilmez.
+
+Uygulamanın NAS adapter ayarları, doğrulanmış aktarım ve yedekleme için
+[QNAP dekont depolama](../../docs/NAS-RECEIPT-STORAGE.md) belgesine bakın.

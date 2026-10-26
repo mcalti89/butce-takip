@@ -116,3 +116,6 @@ yazılmaz. [TCMB arşivi ve cron](../../docs/TCMB-ARCHIVE.md) belgesine bakın.
 `004-receipts.sql` kullanıcıya özel PDF dekontlarını ayrı bir MEDIUMBLOB
 tablosunda saklar. Taşıma ve tam yedekleme bu tabloyu da kapsamalıdır.
 [Dekont saklama ve erişim](../../docs/RECEIPTS.md) belgesine bakın.
+
+`005-receipt-nas.sql`, doğrulanmış NAS konumlarını ve kalıcı fiziksel silme
+kuyruğunu ekler. Mevcut dekont gövdelerini değiştirmez. [NAS depolaması](../../docs/NAS-RECEIPT-STORAGE.md).

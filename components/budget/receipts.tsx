@@ -130,6 +130,11 @@ export function useReceiptEditor(
           <View key={r.id} style={{ gap: 6 }}>
             <Txt numberOfLines={2} style={{ fontSize: 12 }}>
               {r.name} · {sizeLabel(r.size)}
+              {r.storage === "nas"
+                ? " · NAS"
+                : r.storage === "pending"
+                  ? " · NAS aktarımı bekliyor; çevrimiçi kaydedildi"
+                  : ""}
             </Txt>
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
               <Button

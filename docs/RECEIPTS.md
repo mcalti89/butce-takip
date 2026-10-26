@@ -1,5 +1,10 @@
 # İşlemlere PDF banka dekontu ekleme
 
+NAS depolaması etkinleştirilen Production kurulumu için güncel yazma/okuma,
+aktarım ve tam yedekleme davranışı [QNAP dekont depolama](NAS-RECEIPT-STORAGE.md)
+belgesinde açıklanır. Aşağıdaki MEDIUMBLOB saklama, SQL varsayılanı ve geçici
+NAS aktarım kuyruğunun temelidir.
+
 İşlem ekle/düzenle ekranındaki **PDF dekont ekle** düğmesi gelir, gider,
 transfer ve döviz al/sat işlemlerine PDF iliştirir. Dosya seçimi tarayıcı
 belleğinde bekler. **Kaydet** önce bütçeyi kaydeder, ardından dekontları yükler.

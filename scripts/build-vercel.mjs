@@ -2,6 +2,7 @@ import { spawnSync } from 'node:child_process';
 
 const commands = process.env.BUDGET_DATABASE_URL ? [
   ['db:budget'],
+  ['exec', 'tsx', 'scripts/verify-nas-deployment.ts'],
   ['exec', 'tsx', 'scripts/verify-budget-deployment.ts'],
   ['exec', 'tsx', 'scripts/sync-fx-archive.ts'],
 ] : [];

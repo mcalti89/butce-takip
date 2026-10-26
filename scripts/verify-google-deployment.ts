@@ -345,7 +345,10 @@ export async function verifyGoogleDeployment() {
       name: "Synthetic bank receipt.pdf",
       base64: pdf.toString("base64"),
     };
-    check((await request("receipt-upload", upload, a.cookie)).status === 200);
+    const firstReceipt = await request("receipt-upload", upload, a.cookie);
+    check(firstReceipt.status === 200);
+    if (process.env.BUDGET_RECEIPT_STORAGE === "nas")
+      check((await firstReceipt.json()).receipt.storage === "nas");
     check((await request("receipt-upload", upload, a.cookie)).status === 200);
     const files = await (
       await request(`receipts&accountId=${a.accountId}`, undefined, a.cookie)
@@ -397,6 +400,10 @@ export async function verifyGoogleDeployment() {
     console.log(
       "PDF dekont SQL yayın kontrolü başarılı; yükleme, özel indirme, tekrar güvenliği ve kullanıcı ayrımı doğrulandı.",
     );
+    if (process.env.BUDGET_RECEIPT_STORAGE === "nas")
+      console.log(
+        "NAS dekont API yayın kontrolü başarılı; Google oturumu ile NAS’a kaydedildi, okundu ve silindi.",
+      );
     const writes = await Promise.all([
       request("data", { accountId: a.accountId, revision: 2, data }, a.cookie),
       request("data", { accountId: a.accountId, revision: 2, data }, a.cookie),
@@ -422,10 +429,15 @@ export async function verifyGoogleDeployment() {
     server.closeAllConnections();
     await new Promise<void>((resolve) => server.close(() => resolve()));
     try {
-      for (const user of users)
+      for (const user of users) {
+        const account = await repository.account(user.email);
+        if (account)
+          for (const receipt of await repository.receipts.list(account.id))
+            await repository.receipts.remove(account.id, receipt.id);
         await pool.execute("DELETE FROM budget_cloud_accounts WHERE email=?", [
           user.email,
         ]);
+      }
       for (const secret of challenges) {
         await pool.execute(
           "DELETE FROM budget_cloud_google_challenges WHERE token_hash=?",

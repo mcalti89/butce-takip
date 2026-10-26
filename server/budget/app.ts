@@ -1,5 +1,6 @@
 import { validInvestmentChanges } from "./investments";
 import { parseReceipt, ReceiptError } from "./receipts";
+import { NasStorageError } from "./nas";
 import express, { type Request, type Response } from "express";
 import { parse as parseCookies } from "cookie";
 import { randomBytes, randomUUID } from "node:crypto";
@@ -305,12 +306,10 @@ export function createBudgetApp(options: Options = {}) {
         const expected =
           req.method === "POST" ? req.body?.accountId : req.query.accountId;
         if (expected !== account.id)
-          return res
-            .status(409)
-            .json({
-              code: "ACCOUNT_CHANGED",
-              error: "Açık hesap değişti. Sayfayı yenile.",
-            });
+          return res.status(409).json({
+            code: "ACCOUNT_CHANGED",
+            error: "Açık hesap değişti. Sayfayı yenile.",
+          });
         if (!db.receipts)
           return res
             .status(503)
@@ -417,10 +416,15 @@ export function createBudgetApp(options: Options = {}) {
             error:
               "Başka bir cihaz veya sekme verileri güncelledi. Son verileri yükleyip değişikliğini tekrar uygula.",
           });
+        await db.receipts
+          ?.flushDeletions({ accountId: account.id, max: 1, timeoutMs: 1500 })
+          .catch(() => {});
         return res.json({ accountId: account.id, revision: next });
       }
       return res.status(404).json({ error: "İşlem bulunamadı." });
     } catch (error) {
+      if (error instanceof NasStorageError)
+        return res.status(503).json({ error: error.message });
       if (error instanceof ReceiptError)
         return res.status(error.status).json({ error: error.message });
       return res.status(503).json({

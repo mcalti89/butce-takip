@@ -5,6 +5,7 @@ export const MAX_RECEIPT_STORAGE = 3 * 1024 * 1024 * 1024;
 export const MAX_STORED_RECEIPTS = 5000;
 export type ReceiptKind = "transaction" | "transfer";
 export type Receipt = {
+  storage?: "sql" | "pending" | "nas";
   id: string;
   kind: ReceiptKind;
   entryId: string;

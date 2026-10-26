@@ -12,6 +12,8 @@ import {
   MysqlReceiptRepository,
   lockReceiptOwner,
   receiptTarget,
+  enqueueNasDeletions,
+  type ReceiptStorageOptions,
 } from "./receipts";
 import type { BudgetData } from "../../lib/budget/model";
 
@@ -105,8 +107,11 @@ export function databaseOptions(
 
 export class MysqlBudgetRepository implements BudgetRepository {
   readonly receipts: MysqlReceiptRepository;
-  constructor(readonly pool: Pool) {
-    this.receipts = new MysqlReceiptRepository(pool);
+  constructor(
+    readonly pool: Pool,
+    storageOptions?: ReceiptStorageOptions,
+  ) {
+    this.receipts = new MysqlReceiptRepository(pool, storageOptions);
   }
   async account(email: string): Promise<Account | null> {
     const [rows] = await this.pool.execute<RowDataPacket[]>(
@@ -361,6 +366,11 @@ export class MysqlBudgetRepository implements BudgetRepository {
       );
       const removed = files.filter(
         (f) => !receiptTarget(data, f.entry_kind, f.entry_id),
+      );
+      await enqueueNasDeletions(
+        connection,
+        accountId,
+        removed.map((f) => f.id),
       );
       if (removed.length)
         await connection.execute(

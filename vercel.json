@@ -78,6 +78,9 @@
   "buildCommand": "node scripts/build-vercel.mjs",
   "outputDirectory": "web-dist",
   "functions": {
+    "api/receipts-sync.ts": {
+      "maxDuration": 60
+    },
     "api/cloud.ts": {
       "maxDuration": 30
     },
@@ -89,6 +92,10 @@
     }
   },
   "crons": [
+    {
+      "path": "/api/receipts-sync",
+      "schedule": "30 3 * * *"
+    },
     {
       "path": "/api/fx-sync",
       "schedule": "0 13 * * *"
