@@ -106,6 +106,8 @@ for (const file of files.sort()) {
     !staticAsset &&
     ![
       "/manifest.webmanifest",
+      "/receipt-reader.html",
+      "/receipt-reader.js",
       "/receipt-viewer.html",
       "/receipt-viewer.js",
       "/receipt-pdf-runtime.mjs",

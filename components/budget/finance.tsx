@@ -1,3 +1,6 @@
+import type { ReceiptImportDraft } from "@/lib/budget/receipt-model";
+import { importedDuplicate } from "@/lib/budget/receipt-import";
+import { normalizeIban, validIban } from "@/lib/budget/bank-identity";
 import { isInvestmentAccount } from "@/lib/budget/account-scope";
 import { ExchangeDetails } from "./exchange";
 import { EntryTypeSelector } from "./entry-type";
@@ -107,6 +110,8 @@ export function AccountEditor({
 }) {
   const { data, update } = useBudget();
   const [name, setName] = useState(account?.name ?? "");
+  const [bankName, setBankName] = useState(account?.bankName ?? "");
+  const [iban, setIban] = useState(account?.iban ?? "");
   const [kind, setKind] = useState<FinancialAccount["kind"]>(
     account?.kind ?? initialKind ?? "bank",
   );
@@ -163,8 +168,12 @@ export function AccountEditor({
       return setError(
         "Kart limiti pozitif olmalı; kesim ve son ödeme günü 1–31 arasında olmalı.",
       );
+    if (iban.trim() && !validIban(iban))
+      return setError("Geçerli bir IBAN gir; boş da bırakabilirsin.");
     const entry: FinancialAccount = {
       ...(account ?? {}),
+      bankName: bankName.trim() || undefined,
+      iban: iban.trim() ? normalizeIban(iban) : undefined,
       id: account?.id ?? id(),
       name: name.trim(),
       kind,
@@ -201,6 +210,28 @@ export function AccountEditor({
         onChangeText={setName}
         maxLength={80}
       />
+      {kind !== "cash" ? (
+        <>
+          <Field
+            label="Banka adı (isteğe bağlı)"
+            value={bankName}
+            onChangeText={setBankName}
+            maxLength={80}
+            placeholder="Örn. Enpara"
+          />
+          <Field
+            label="IBAN (isteğe bağlı)"
+            value={iban}
+            onChangeText={setIban}
+            maxLength={48}
+            autoCapitalize="characters"
+            placeholder="TR… / OM…"
+          />
+          <Caption>
+            Dekonttan işlem eklerken hesabını eşleştirmek için kullanılır.
+          </Caption>
+        </>
+      ) : null}
       <Choices>
         {(["cash", "bank", "card", "investment"] as const).map((k) => (
           <Choice
@@ -321,6 +352,7 @@ export function TransferEditor({
   onTypeChange,
   toId,
   amount,
+  receiptImport,
   onClose,
   onDone,
 }: {
@@ -329,6 +361,7 @@ export function TransferEditor({
   onTypeChange?: (type: TransactionType) => void;
   toId?: string;
   amount?: number;
+  receiptImport?: ReceiptImportDraft;
   onClose: () => void;
   onDone: (s: string) => void;
 }) {
@@ -350,16 +383,24 @@ export function TransferEditor({
   const [value, setValue] = useState(
     String(transfer?.amount ?? draft?.amount ?? amount ?? ""),
   );
-  const [date, setDate] = useState(transfer?.date ?? draft?.date ?? today());
+  const [date, setDate] = useState(
+    transfer?.date ?? draft?.date ?? (receiptImport ? "" : today()),
+  );
   const [time, setTime] = useState(
-    transfer?.time ?? (transfer ? "" : (draft?.time ?? localTime())),
+    transfer?.time ??
+      (transfer ? "" : (draft?.time ?? (receiptImport ? "" : localTime()))),
   );
   const [note, setNote] = useState(transfer?.note ?? draft?.note ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const source = accounts.find((a) => a.id === from);
-  const [entryId] = useState(() => transfer?.id ?? id());
-  const receipts = useReceiptEditor("transfer", entryId, busy);
+  const [entryId] = useState(() => transfer?.id ?? draft?.id ?? id());
+  const receipts = useReceiptEditor(
+    "transfer",
+    entryId,
+    busy,
+    receiptImport?.file,
+  );
   const saved = useRef(!!transfer);
   async function save() {
     if (busy || receipts.working) return;
@@ -375,10 +416,19 @@ export function TransferEditor({
     let wrote = false;
     try {
       await update((d) => {
+        if (
+          receiptImport &&
+          !saved.current &&
+          importedDuplicate(d, receiptImport.source, date)
+        )
+          throw new Error(
+            "Bu dekont daha önce işleme eklenmiş. İkinci kez kaydedilemez.",
+          );
         if (saved.current && !d.accountTransfers?.some((t) => t.id === entryId))
           throw new Error("Transfer artık bulunamıyor. Son verileri yükle.");
         return saveTransfer(d, {
           ...(transfer ?? {}),
+          ...(receiptImport ? { receiptImport: receiptImport.source } : {}),
           id: entryId,
           fromId: from,
           toId: to,

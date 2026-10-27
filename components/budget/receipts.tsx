@@ -27,11 +27,14 @@ export function useReceiptEditor(
   kind: ReceiptKind,
   entryId: string,
   busy: boolean,
+  initialFile?: PickedReceipt,
 ) {
   const { cloud } = useBudget();
   const accountId = cloud.accountId ?? "";
   const index = useReceiptIndex();
-  const [pending, setPending] = useState<PickedReceipt[]>([]);
+  const [pending, setPending] = useState<PickedReceipt[]>(() =>
+    initialFile ? [initialFile] : [],
+  );
   const [uploaded, setUploaded] = useState<Receipt[]>([]);
   const [removed, setRemoved] = useState<string[]>([]);
   const [error, setError] = useState("");

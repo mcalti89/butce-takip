@@ -111,6 +111,24 @@
           "value": "same-origin-allow-popups"
         }
       ]
+    },
+    {
+      "source": "/receipt-reader.html",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
+    },
+    {
+      "source": "/receipt-reader.js",
+      "headers": [
+        {
+          "key": "Cache-Control",
+          "value": "public, max-age=0, must-revalidate"
+        }
+      ]
     }
   ],
   "framework": null,

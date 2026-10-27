@@ -1,3 +1,5 @@
+import { validReceiptImport } from "./receipt-model";
+import { validIban } from "./bank-identity";
 import {
   investmentCashDelta,
   validPortfolioData,
@@ -13,6 +15,8 @@ import { currencyScale, minorUnits } from "./currency";
 import type { BudgetData, Transaction } from "./model";
 import { SUPPORTED_CURRENCY_CODES } from "./fx";
 export type FinancialAccount = {
+  bankName?: string;
+  iban?: string;
   id: string;
   name: string;
   kind: "cash" | "bank" | "card" | "investment";
@@ -25,6 +29,7 @@ export type FinancialAccount = {
   paymentDay?: number;
 };
 export type AccountTransfer = {
+  receiptImport?: import("./receipt-model").ReceiptImportSource;
   id: string;
   fromId: string;
   toId: string;
@@ -414,6 +419,10 @@ export function validFinanceData(data: BudgetData) {
       typeof a.name !== "string" ||
       !a.name.trim() ||
       a.name.length > 80 ||
+      (a.bankName !== undefined &&
+        (typeof a.bankName !== "string" || a.bankName.length > 80)) ||
+      (a.iban !== undefined &&
+        (typeof a.iban !== "string" || !validIban(a.iban))) ||
       !currencyValid(a.currency) ||
       !moneyValid(a.openingBalance, true, a.currency) ||
       !dateValid(a.openingDate) ||
@@ -436,6 +445,7 @@ export function validFinanceData(data: BudgetData) {
     const f = byId.get(t.fromId),
       to = byId.get(t.toId);
     if (
+      !validReceiptImport(t.receiptImport) ||
       !f ||
       !to ||
       f.id === to.id ||

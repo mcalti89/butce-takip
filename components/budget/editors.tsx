@@ -1,3 +1,5 @@
+import type { ReceiptImportDraft } from "@/lib/budget/receipt-model";
+import { importedDuplicate } from "@/lib/budget/receipt-import";
 import { EntryTypeSelector } from "./entry-type";
 import { useReceiptEditor } from "./receipts";
 import { TransferEditor } from "./finance";
@@ -34,12 +36,14 @@ import { Button, C, ErrorText, Field, Icon, Sheet, Txt, styles } from "./ui";
 export function TransactionEditor({
   transaction,
   draft,
+  receiptImport,
   onClose,
   onDone,
   onDelete,
 }: {
   transaction?: Transaction;
   draft?: Partial<Transaction>;
+  receiptImport?: ReceiptImportDraft;
   onClose: () => void;
   onDone: (message: string) => void;
   onDelete: (transaction: Transaction) => void;
@@ -53,9 +57,11 @@ export function TransactionEditor({
       ? String(initial.amount).replace(".", ",")
       : "",
   );
-  const [date, setDate] = useState(initial?.date || today());
+  const [date, setDate] = useState(
+    initial?.date ?? (receiptImport ? "" : today()),
+  );
   const [time, setTime] = useState(
-    initial?.time ?? (transaction ? "" : localTime()),
+    initial?.time ?? (transaction || receiptImport ? "" : localTime()),
   );
   const [description, setDescription] = useState(initial?.description || "");
   const [selectedCategoryId, setCategoryId] = useState(
@@ -73,9 +79,14 @@ export function TransactionEditor({
   } | null>(null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [entryId] = useState(() => transaction?.id ?? id());
+  const [entryId] = useState(() => transaction?.id ?? draft?.id ?? id());
   const saved = useRef(!!transaction);
-  const receipts = useReceiptEditor("transaction", entryId, busy);
+  const receipts = useReceiptEditor(
+    "transaction",
+    entryId,
+    busy,
+    receiptImport?.file,
+  );
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
   const categories = data.categories.filter((c) => c.type === type);
@@ -149,7 +160,10 @@ export function TransactionEditor({
       return setError(
         "Geçerli bir saat gir. Biçim: SS:DD (00:00–23:59). Saati bilmiyorsan boş bırak.",
       );
-    if ((currency !== "TRY" || initial?.planId) && date > today()) {
+    if (
+      (currency !== "TRY" || initial?.planId || receiptImport) &&
+      date > today()
+    ) {
       setError("Döviz kuru gelecekteki bir işlem tarihi için kullanılamaz.");
       return;
     }
@@ -212,6 +226,7 @@ export function TransactionEditor({
       }
       const entry: Transaction = {
         ...(transaction ?? {}),
+        ...(receiptImport ? { receiptImport: receiptImport.source } : {}),
         ...(initial?.planId
           ? { planId: initial.planId, planIndex: initial.planIndex }
           : {}),
@@ -228,6 +243,16 @@ export function TransactionEditor({
         ...(currency === "TRY" ? { baseAmount } : {}),
       };
       await update((d) => {
+        if (
+          receiptImport &&
+          !saved.current &&
+          importedDuplicate(d, receiptImport.source, date)
+        )
+          throw new Error(
+            "Bu dekont daha önce işleme eklenmiş. İkinci kez kaydedilemez.",
+          );
+        if (receiptImport && !accountId)
+          throw new Error("Dekont işlemi için hesabını seç.");
         const account = accountId
           ? d.financialAccounts?.find((a) => a.id === accountId)
           : undefined;
@@ -642,16 +667,19 @@ export function TransactionEditor({
             changeType(type);
             setTransferOpen(false);
           }}
+          receiptImport={receiptImport}
           draft={{
-            fromId:
-              accountId ||
-              data.financialAccounts?.find(
-                (a) =>
-                  !a.archived &&
-                  a.kind !== "investment" &&
-                  a.currency === currency,
-              )?.id ||
-              "",
+            id: draft?.id,
+            fromId: receiptImport
+              ? accountId
+              : accountId ||
+                data.financialAccounts?.find(
+                  (a) =>
+                    !a.archived &&
+                    a.kind !== "investment" &&
+                    a.currency === currency,
+                )?.id ||
+                "",
             amount: Number.isFinite(parseAmount(amount, currency))
               ? parseAmount(amount, currency)
               : undefined,

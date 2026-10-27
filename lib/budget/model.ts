@@ -1,10 +1,10 @@
+import { validReceiptImport } from "./receipt-model";
 import type {
   InvestmentPosition,
   InvestmentEntry,
 } from "./investment-portfolio";
 import { budgetTransactions } from "./account-scope";
 import { validTime, compareDatedRecordsNewestFirst } from "./time";
-export { localTime, validTime } from "./time";
 import { currencyDigits, currencyScale } from "./currency";
 import {
   validFinanceData,
@@ -12,6 +12,7 @@ import {
   type AccountTransfer,
   type PaymentPlan,
 } from "./finance";
+export { localTime, validTime } from "./time";
 export type TransactionType = "income" | "expense";
 export type Category = {
   id: string;
@@ -21,6 +22,7 @@ export type Category = {
   icon: string;
 };
 export type Transaction = {
+  receiptImport?: import("./receipt-model").ReceiptImportSource;
   id: string;
   type: TransactionType;
   categoryId: string;
@@ -435,6 +437,7 @@ export function validateData(value: unknown): value is BudgetData {
     !v.transactions.every(
       (t) =>
         t &&
+        validReceiptImport(t.receiptImport) &&
         typeof t.id === "string" &&
         typeof t.description === "string" &&
         typeof t.amount === "number" &&

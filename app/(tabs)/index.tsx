@@ -1,3 +1,4 @@
+import { ReceiptImport } from "@/components/budget/receipt-import";
 import { ReceiptsDashboard } from "@/components/budget/receipt-list";
 import { InvestmentDashboard } from "@/components/budget/investments";
 import { ExchangeEditor } from "@/components/budget/exchange";
@@ -84,6 +85,7 @@ type Page =
   | "data"
   | "settings";
 type Dialog =
+  | { kind: "receipt-import" }
   | {
       kind: "transaction";
       transaction?: Transaction;
@@ -635,6 +637,16 @@ export default function BudgetApp() {
                       onPress={() => setMonth((m) => shiftMonth(m, 1))}
                     />
                   </View>
+                  {page !== "calendar" ? (
+                    <Button
+                      icon="file-plus"
+                      kind="secondary"
+                      small={mobile}
+                      onPress={() => setDialog({ kind: "receipt-import" })}
+                    >
+                      Dekont ekle
+                    </Button>
+                  ) : null}
                   <Button
                     icon="plus"
                     small={mobile}
@@ -1430,6 +1442,9 @@ export default function BudgetApp() {
             <Icon name="x" size={13} />
           </Pressable>
         </View>
+      ) : null}
+      {dialog?.kind === "receipt-import" ? (
+        <ReceiptImport onClose={close} onDone={notify} />
       ) : null}
       {dialog?.kind === "account" ? (
         <AccountEditor

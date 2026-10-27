@@ -21,3 +21,28 @@ export type PickedReceipt = {
 };
 export const receiptKey = (kind: ReceiptKind, entryId: string) =>
   `${kind}:${entryId}`;
+
+export type ReceiptImportSource = {
+  sha256: string;
+  bank?: string;
+  reference?: string;
+};
+export type ReceiptImportDraft = {
+  file: PickedReceipt;
+  source: ReceiptImportSource;
+  warnings: string[];
+};
+
+export function validReceiptImport(value: unknown) {
+  if (value === undefined) return true;
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const v = value as ReceiptImportSource;
+  return (
+    typeof v.sha256 === "string" &&
+    /^[a-f0-9]{64}$/.test(v.sha256) &&
+    (v.bank === undefined ||
+      (typeof v.bank === "string" && v.bank.length <= 80)) &&
+    (v.reference === undefined ||
+      (typeof v.reference === "string" && v.reference.length <= 120))
+  );
+}

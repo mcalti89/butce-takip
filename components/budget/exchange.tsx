@@ -1,3 +1,5 @@
+import type { ReceiptImportDraft } from "@/lib/budget/receipt-model";
+import { importedDuplicate } from "@/lib/budget/receipt-import";
 import React, { useRef, useState } from "react";
 import { useReceiptEditor } from "./receipts";
 import { View } from "react-native";
@@ -65,10 +67,14 @@ export function ExchangeDetails({
 }
 export function ExchangeEditor({
   transfer,
+  draft,
+  receiptImport,
   onClose,
   onDone,
 }: {
   transfer?: AccountTransfer;
+  draft?: Partial<AccountTransfer>;
+  receiptImport?: ReceiptImportDraft;
   onClose: () => void;
   onDone: (s: string) => void;
 }) {
@@ -78,6 +84,7 @@ export function ExchangeEditor({
   );
   const [fromId, setFrom] = useState(
     transfer?.fromId ??
+      draft?.fromId ??
       accounts.find((a) => a.currency !== "TRY")?.id ??
       accounts[0]?.id ??
       "",
@@ -85,6 +92,7 @@ export function ExchangeEditor({
   const source = accounts.find((a) => a.id === fromId);
   const [toId, setTo] = useState(
     transfer?.toId ??
+      draft?.toId ??
       accounts.find(
         (a) => a.currency === "TRY" && a.currency !== source?.currency,
       )?.id ??
@@ -92,17 +100,28 @@ export function ExchangeEditor({
       "",
   );
   const target = accounts.find((a) => a.id === toId);
-  const [amount, setAmount] = useState(String(transfer?.amount ?? ""));
-  const [date, setDate] = useState(transfer?.date ?? today());
-  const [time, setTime] = useState(
-    transfer?.time ?? (transfer ? "" : localTime()),
+  const [amount, setAmount] = useState(
+    String(transfer?.amount ?? draft?.amount ?? ""),
   );
-  const [note, setNote] = useState(transfer?.note ?? "");
+  const [date, setDate] = useState(
+    transfer?.date ?? draft?.date ?? (receiptImport ? "" : today()),
+  );
+  const [time, setTime] = useState(
+    transfer?.time ??
+      draft?.time ??
+      (transfer || receiptImport ? "" : localTime()),
+  );
+  const [note, setNote] = useState(transfer?.note ?? draft?.note ?? "");
   const [busy, setBusy] = useState(false),
     [error, setError] = useState("");
-  const [entryId] = useState(() => transfer?.id ?? id());
+  const [entryId] = useState(() => transfer?.id ?? draft?.id ?? id());
   const saved = useRef(!!transfer);
-  const receipts = useReceiptEditor("transfer", entryId, busy);
+  const receipts = useReceiptEditor(
+    "transfer",
+    entryId,
+    busy,
+    receiptImport?.file,
+  );
   const n = parseAmount(amount, source?.currency);
   const initialRate = transfer?.exchange
     ? exchangeRateInput(transfer.exchange, transfer.currency)
@@ -167,11 +186,21 @@ export function ExchangeEditor({
         throw new Error("Geçerli bir saat gir. Biçim: SS:DD (00:00–23:59).");
       setBusy(true);
       await update((d) => {
+        if (
+          receiptImport &&
+          !saved.current &&
+          importedDuplicate(d, receiptImport.source, date)
+        )
+          throw new Error(
+            "Bu dekont daha önce işleme eklenmiş. İkinci kez kaydedilemez.",
+          );
         if (saved.current && !d.accountTransfers?.some((t) => t.id === entryId))
           throw new Error(
             "Bu döviz işlemi artık bulunamıyor. Son verileri yükle.",
           );
         return saveExchange(d, {
+          ...(transfer ?? {}),
+          ...(receiptImport ? { receiptImport: receiptImport.source } : {}),
           id: entryId,
           fromId,
           toId,
