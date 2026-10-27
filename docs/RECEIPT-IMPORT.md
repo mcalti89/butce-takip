@@ -11,3 +11,7 @@ Orijinal PDF, finansal kayıt başarıyla yazıldıktan sonra mevcut kimlik doğ
 Yeni sunucu uç noktası/SQL tablosu, NAS yeniden kurulumu veya dış analiz anahtarı gerektirmez. Yeni alanlar sürüm-1 JSON belgesinde isteğe bağlıdır; NAS v2 bilinmeyen alanları korur. Önceki kayıtlar geçerlidir.
 
 Kontroller: etiket/tutar/IBAN/yön/mükerrer kayıt birim testleri; finans ve döviz regresyonları; gerçek tarayıcıda sentetik PDF okuma, taslak, kayıt+PDF indirme, yükleme hatası/tekrar, mükerrer ret, tarama PDF ve mobil ekran kontrolleri. Gerçek müşteri verileri testlere eklenmez.
+
+## Banka ve IBAN kontrolü
+
+Hesap kartlarında kayıtlı banka adı ve IBAN gösterilir. Dekont önerisinde gelir/gider için kendi hesabını, transfer/döviz için gönderen ve alıcı hesaplarını seç. Seçilen hesapların kayıtlı IBAN’ları, dekontun ilgili tarafında okunan IBAN ile karşılaştırılır; eksik bilgi ve uyuşmazlık açıkça gösterilir. Banka/IBAN düzenlemesi ayrı kaydetme düğmesiyle mevcut hesaba yazılır; bakiye, geçmiş işlemler ve dekont değişmez. Karşı tarafın IBAN’ını kendi hesabına kaydetme. PDF bilgileri kayıtlı banka/IBAN alanlarının üzerine otomatik yazılmaz.

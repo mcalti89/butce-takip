@@ -983,6 +983,21 @@ export function AccountsDashboard({
                     <Txt style={{ color: C.muted, fontSize: 12, marginTop: 5 }}>
                       {kindNames[a.kind]} · {a.currency}
                     </Txt>
+                    {a.bankName ? (
+                      <Txt
+                        style={{ color: C.muted, fontSize: 12, marginTop: 5 }}
+                      >
+                        Banka: {a.bankName}
+                      </Txt>
+                    ) : null}
+                    {a.iban ? (
+                      <Txt
+                        selectable
+                        style={{ color: C.muted, fontSize: 12, marginTop: 5 }}
+                      >
+                        IBAN: {a.iban.replace(/(.{4})(?=.)/g, "$1 ")}
+                      </Txt>
+                    ) : null}
                   </View>
                   <Icon
                     name={

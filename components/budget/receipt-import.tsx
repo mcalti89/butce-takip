@@ -14,6 +14,7 @@ import type { ReceiptImportDraft } from "@/lib/budget/receipt-model";
 import { Sheet, Button, ErrorText, Txt, C } from "./ui";
 import { TransactionEditor } from "./editors";
 import { TransferEditor } from "./finance";
+import { ReceiptAccountPicker } from "./receipt-account-picker";
 import { ExchangeEditor } from "./exchange";
 function Caption({ children }: { children: React.ReactNode }) {
   return <Txt style={{ color: C.muted, fontSize: 12 }}>{children}</Txt>;
@@ -35,6 +36,10 @@ export function ReceiptImport({
   const [editing, setEditing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [accountId, setAccountId] = useState("");
+  const [fromId, setFromId] = useState("");
+  const [toId, setToId] = useState("");
+  const [savingAccount, setSavingAccount] = useState(false);
   const active = useRef(true);
   useEffect(() => {
     active.current = true;
@@ -82,6 +87,9 @@ export function ReceiptImport({
         suggestion,
         imported: { file, source, warnings: suggestion.warnings },
       });
+      setAccountId(suggestion.accountId ?? "");
+      setFromId(suggestion.fromId ?? "");
+      setToId(suggestion.toId ?? "");
       if (suggestion.mode) {
         setMode(suggestion.mode);
         setChosen(true);
@@ -106,8 +114,8 @@ export function ReceiptImport({
           receiptImport={imported}
           draft={{
             ...common,
-            fromId: s.fromId ?? "",
-            toId: s.toId ?? "",
+            fromId,
+            toId,
             note: s.description ?? "",
           }}
           onClose={onClose}
@@ -120,8 +128,8 @@ export function ReceiptImport({
           receiptImport={imported}
           draft={{
             ...common,
-            fromId: s.fromId ?? "",
-            toId: s.toId ?? "",
+            fromId,
+            toId,
             note: s.description ?? "",
           }}
           onClose={onClose}
@@ -134,7 +142,7 @@ export function ReceiptImport({
         draft={{
           ...common,
           type: mode,
-          accountId: s.accountId ?? "",
+          accountId,
           currency: s.currency ?? "TRY",
           description: s.description ?? "",
           categoryId: suggestedCategory(data, mode, s.description ?? ""),
@@ -149,14 +157,21 @@ export function ReceiptImport({
     <Sheet
       title="Dekonttan işlem ekle"
       subtitle="PDF bilgilerini oku, kontrol et ve kaydet."
-      onClose={onClose}
+      onClose={() => {
+        if (!savingAccount && !busy) onClose();
+      }}
     >
       <Caption>
         Metin içeren banka PDF’leri cihazında okunur. Dekont, işlemi Kaydet
         dediğinde hesabına eklenir. Taranmış PDF’lerde bilgileri elle doldurman
         gerekir.
       </Caption>
-      <Button icon="upload" onPress={() => void pick()} busy={busy}>
+      <Button
+        icon="upload"
+        onPress={() => void pick()}
+        busy={busy}
+        disabled={savingAccount}
+      >
         {busy
           ? "Dekont okunuyor…"
           : result
@@ -168,12 +183,6 @@ export function ReceiptImport({
         <View style={{ gap: 14 }}>
           <Txt bold>{result.imported.file.name}</Txt>
           <Txt>Banka: {result.suggestion.bank ?? "Belirlenemedi"}</Txt>
-          <Txt>
-            Hesap:{" "}
-            {data.financialAccounts?.find(
-              (a) => a.id === result.suggestion.accountId,
-            )?.name ?? "Formda seçilmeli"}
-          </Txt>
           <Txt>
             Tutar:{" "}
             {result.suggestion.amount !== undefined
@@ -198,9 +207,20 @@ export function ReceiptImport({
             ).map((item) => (
               <Button
                 key={item.value}
+                disabled={savingAccount}
                 small
                 kind={chosen && mode === item.value ? "secondary" : "ghost"}
                 onPress={() => {
+                  if (mode !== item.value)
+                    setAccountId(
+                      item.value === "income"
+                        ? (result.suggestion.toId ??
+                            result.suggestion.accountId ??
+                            "")
+                        : (result.suggestion.fromId ??
+                            result.suggestion.accountId ??
+                            ""),
+                    );
                   setMode(item.value);
                   setChosen(true);
                 }}
@@ -209,6 +229,44 @@ export function ReceiptImport({
               </Button>
             ))}
           </View>
+          {mode === "transfer" || mode === "exchange" ? (
+            <>
+              <ReceiptAccountPicker
+                label="Gönderen hesabım"
+                accountId={fromId}
+                onSelect={setFromId}
+                readIban={result.suggestion.senderIban}
+                excludeId={toId}
+                mode={mode}
+                onBusy={setSavingAccount}
+                disabled={savingAccount}
+              />
+              <ReceiptAccountPicker
+                label="Alıcı hesabım"
+                accountId={toId}
+                onSelect={setToId}
+                readIban={result.suggestion.recipientIban}
+                excludeId={fromId}
+                mode={mode}
+                onBusy={setSavingAccount}
+                disabled={savingAccount}
+              />
+            </>
+          ) : (
+            <ReceiptAccountPicker
+              label="İşlemin hesabı"
+              accountId={accountId}
+              onSelect={setAccountId}
+              readIban={
+                mode === "income"
+                  ? result.suggestion.recipientIban
+                  : result.suggestion.senderIban
+              }
+              mode={mode}
+              onBusy={setSavingAccount}
+              disabled={savingAccount}
+            />
+          )}
           {result.suggestion.warnings.map((w) => (
             <Txt key={w} style={{ color: C.amber, fontSize: 12 }}>
               {w}
@@ -219,7 +277,13 @@ export function ReceiptImport({
             kesildiyse ayrı işlem olarak ekle. Kaydetmeden bakiyelerin değişmez.
           </Caption>
           <Button
-            disabled={!chosen}
+            disabled={
+              !chosen ||
+              savingAccount ||
+              (mode === "transfer" || mode === "exchange"
+                ? !fromId || !toId || fromId === toId
+                : !accountId)
+            }
             onPress={() => {
               if (
                 importedDuplicate(
