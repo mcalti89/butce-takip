@@ -89,6 +89,34 @@ function signed(
   };
 }
 describe("NAS database HTTPS bridge", () => {
+  it("restores the owner marker only for an authorized legacy PDF download", async () => {
+    const f = await fixture();
+    const entry = await listen(
+      withNasBackend(express(), {
+        env: {
+          NODE_ENV: "test",
+          BUDGET_BACKEND_URL: f.outer.url,
+          BUDGET_BACKEND_SECRET: f.secret,
+        },
+        localTest: true,
+      }),
+    );
+    const owner = "11111111-1111-4111-8111-111111111111";
+    const good = await fetch(
+      entry.url + `/api/cloud?action=receipt-download&accountId=${owner}&pdf=1`,
+    );
+    expect(good.status).toBe(200);
+    expect(good.headers.get("x-budget-account")).toBe(owner);
+    for (const path of [
+      `/api/cloud?action=status&accountId=${owner}&pdf=1`,
+      `/api/cloud?action=receipt-download&accountId=${owner}&denied=1`,
+      `/api/cloud?action=receipt-download&accountId=${owner}&accountId=other&pdf=1`,
+    ]) {
+      const reply = await fetch(entry.url + path);
+      expect(reply.headers.get("x-budget-account")).toBe(null);
+    }
+  });
+
   it("pauses all data and maintenance writes while preserving budget reads", async () => {
     let called = 0;
     const local = express();

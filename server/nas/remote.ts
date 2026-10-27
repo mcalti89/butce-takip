@@ -205,6 +205,27 @@ export function withNasBackend(
       });
       for (const [name, value] of Object.entries(reply.headers))
         res.setHeader(name, value);
+      // Deployed NAS v2 did not forward this header. On this exact route the
+      // signed 200/PDF reply proves the NAS checked query.accountId against the
+      // authenticated account before reading the file (budget/app.ts). Restore
+      // that same marker for older agents, without changing ownership checks.
+      const requestUrl = new URL(path, "http://localhost");
+      const requestedAccount = requestUrl.searchParams.getAll("accountId");
+      if (
+        !reply.headers["x-budget-account"] &&
+        req.method === "GET" &&
+        requestUrl.pathname === "/api/cloud" &&
+        requestUrl.searchParams.getAll("action").length === 1 &&
+        requestUrl.searchParams.get("action") === "receipt-download" &&
+        reply.status === 200 &&
+        typeof reply.headers["content-type"] === "string" &&
+        reply.headers["content-type"].startsWith("application/pdf") &&
+        requestedAccount.length === 1 &&
+        /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/.test(
+          requestedAccount[0],
+        )
+      )
+        res.setHeader("X-Budget-Account", requestedAccount[0]);
       res.status(reply.status).send(decodeBody(reply.body, MAX_REQUEST));
     } catch {
       res.status(503).json({

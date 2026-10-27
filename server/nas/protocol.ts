@@ -16,6 +16,7 @@ export const RESPONSE_HEADERS = [
   "x-content-type-options",
   "content-security-policy",
   "cross-origin-resource-policy",
+  "x-budget-account",
   "allow",
   "set-cookie",
 ] as const;
