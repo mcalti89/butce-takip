@@ -1,11 +1,16 @@
 # Aiven → QNAP MySQL geçişi: hazırlık ve işletim
 
-## Şimdiki aşama
+## Canlı durum
 
-Kaynak geri dönüş sürümü `v1.0.0-nas-stable` (28a0aa2) korunur. Yeni MySQL
-ve API ayrı bir hazırlık ortamıdır. Production, `BUDGET_BACKEND_URL` eklenip
-ilgili kod main'e alınana kadar Aiven kullanır. Bu belge veya paket tek başına
-canlı veri aktarımı yapmaz; Aiven kapatılmaz ve verileri silinmez.
+2026-10-27 tarihinde canlı veritabanı QNAP'a geçirilmiştir. Son kopyanın 14
+uygulama tablosu doğrulanmış, kayıt işlemleri açılmıştır. Canlı alan adı
+`butce.muratcalti.com`, özel NAS servis adresi `butce-veritabani.muratcalti.com`
+olmuştur. Aiven, geçiş öncesi veri kopyası olarak korunmaktadır.
+
+Doğrulama ve özel veri yedeği/kurtarma ayrıntıları:
+[QNAP-MYSQL-LIVE-2026-10-27.md](QNAP-MYSQL-LIVE-2026-10-27.md).
+Aşağıdaki bölümler kurulum ve aktarım prosedürünü açıklar; bu komutlar normal
+bir yayında kendiliğinden yeniden veri aktarımı yapmaz.
 
 ## Bağlantı
 
