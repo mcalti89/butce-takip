@@ -1,2 +1,3 @@
-// Public TCMB market data only. Personal budget records are served separately.
-export { default } from "../server/fx/app";
+import local from "../server/fx/app";
+import { withNasBackend } from "../server/nas/remote";
+export default withNasBackend(local);

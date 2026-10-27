@@ -1,2 +1,3 @@
-// Vercel Cron supplies Authorization: Bearer CRON_SECRET.
-export { default } from "../server/fx/app";
+import local from "../server/fx/app";
+import { withNasBackend } from "../server/nas/remote";
+export default withNasBackend(local);

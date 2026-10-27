@@ -72,3 +72,11 @@ MySQL Healthy/OOM yok, uygulama hesabıyla TLS VERIFY_IDENTITY bağlantısı,
 yeniden hazırlıkta mevcut kimlik bilgilerinin korunması ve eksik özel ayarlarda
 başlatmanın durması. QNAP donanımındaki gerçek başlatma ve bellek durumu ayrıca
 kurulumdan sonra kontrol edilir.
+
+## API katmanı (ikinci aşama)
+
+MySQL uygulama hesabı ve VERIFY_IDENTITY testi başarılı olduktan sonra
+`compose-with-api.yaml` mevcut uygulamaya ek özel API servisini kurar.
+Ayrıntılı kurulum, veri yedeği/aktarım şartları ve geri dönüş kısıtları:
+[docs/NAS-DATABASE-MIGRATION.md](../../docs/NAS-DATABASE-MIGRATION.md).
+Bu paket canlı verileri otomatik taşımaz veya Production'ı değiştirmez.
