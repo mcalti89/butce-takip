@@ -1,3 +1,4 @@
+import { ReceiptsDashboard } from "@/components/budget/receipt-list";
 import { InvestmentDashboard } from "@/components/budget/investments";
 import { ExchangeEditor } from "@/components/budget/exchange";
 import { filterActivity, type ActivityFilter } from "@/lib/budget/activity";
@@ -73,6 +74,7 @@ import { AnalysisDashboard, BudgetWarnings } from "@/components/budget/reports";
 type Page =
   | "overview"
   | "analysis"
+  | "receipts"
   | "transactions"
   | "budgets"
   | "fx"
@@ -107,6 +109,7 @@ type Dialog =
 const NAV: { id: Page; title: string; short: string; icon: string }[] = [
   { id: "overview", title: "Genel bakış", short: "Pano", icon: "grid" },
   { id: "transactions", title: "İşlemler", short: "İşlemler", icon: "repeat" },
+  { id: "receipts", title: "Dekontlar", short: "Dekontlar", icon: "file-text" },
   { id: "budgets", title: "Bütçeler", short: "Bütçeler", icon: "target" },
   {
     id: "accounts",
@@ -182,6 +185,7 @@ export default function BudgetApp() {
   const hasMonth = [
     "overview",
     "transactions",
+    "receipts",
     "budgets",
     "calendar",
     "analysis",
@@ -342,7 +346,10 @@ export default function BudgetApp() {
           >
             KİŞİSEL FİNANS
           </Txt>
-          <View style={{ gap: 7 }}>
+          <ScrollView
+            style={{ flex: 1, minHeight: 0, marginBottom: 12 }}
+            contentContainerStyle={{ gap: 7 }}
+          >
             {NAV.map((item) => (
               <Pressable
                 key={item.id}
@@ -383,7 +390,7 @@ export default function BudgetApp() {
                 </Txt>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
           <View style={{ marginTop: "auto" }}>
             {height >= 1000 ? (
               <Card
@@ -480,7 +487,11 @@ export default function BudgetApp() {
               </View>
             ) : null}
             {!desktop && !mobile ? (
-              <View style={{ flexDirection: "row", gap: 7 }}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={{ flexDirection: "row", gap: 7 }}
+              >
                 {NAV.map((item) => (
                   <Button
                     key={item.id}
@@ -492,7 +503,7 @@ export default function BudgetApp() {
                     {item.title}
                   </Button>
                 ))}
-              </View>
+              </ScrollView>
             ) : null}
             <View
               style={{
@@ -533,19 +544,21 @@ export default function BudgetApp() {
                       ? "Bugünü anla, yarını planla."
                       : page === "transactions"
                         ? "Her işlem, bir hikâye."
-                        : page === "budgets"
-                          ? "Planın ne kadar kaldı?"
-                          : page === "fx"
-                            ? "Döviz de, net gör."
-                            : page === "investments"
-                              ? "Yatırımlarını takip et."
-                              : page === "accounts"
-                                ? "Hesapların ve kartların."
-                                : page === "calendar"
-                                  ? "Ödemelerini planla."
-                                  : page === "settings"
-                                    ? "Ayarlar"
-                                    : "Bütçen. Senin düzenin."}
+                        : page === "receipts"
+                          ? "Dekontların tek yerde."
+                          : page === "budgets"
+                            ? "Planın ne kadar kaldı?"
+                            : page === "fx"
+                              ? "Döviz de, net gör."
+                              : page === "investments"
+                                ? "Yatırımlarını takip et."
+                                : page === "accounts"
+                                  ? "Hesapların ve kartların."
+                                  : page === "calendar"
+                                    ? "Ödemelerini planla."
+                                    : page === "settings"
+                                      ? "Ayarlar"
+                                      : "Bütçen. Senin düzenin."}
                 </Txt>
                 <Txt style={{ color: C.muted, fontSize: 12, marginTop: 3 }}>
                   {page === "overview"
@@ -554,19 +567,21 @@ export default function BudgetApp() {
                       ? "Gelecek ay tahmini bugüne, raporlar seçili aya göre hesaplanır."
                       : page === "transactions"
                         ? "Gelir ve giderlerini tek yerde takip et."
-                        : page === "budgets"
-                          ? "Kategori limitlerini aya özel belirle."
-                          : page === "fx"
-                            ? "TCMB alış ve satış kurlarını tarihleriyle izle."
-                            : page === "investments"
-                              ? "Anapara, mevduat faizi ve gerçekleşen getiriler."
-                              : page === "accounts"
-                                ? "Bakiyelerini ve transferlerini tek yerde gör."
-                                : page === "calendar"
-                                  ? "Yaklaşan gelir, ödeme ve taksitlerini takip et."
-                                  : page === "settings"
-                                    ? "Uygulama kurulumu ve cihazında kullanım."
-                                    : "Kategorilerini yönet, verilerini yanında taşı."}
+                        : page === "receipts"
+                          ? "Seçili ayın dekontlarını işlem detaylarıyla gör ve indir."
+                          : page === "budgets"
+                            ? "Kategori limitlerini aya özel belirle."
+                            : page === "fx"
+                              ? "TCMB alış ve satış kurlarını tarihleriyle izle."
+                              : page === "investments"
+                                ? "Anapara, mevduat faizi ve gerçekleşen getiriler."
+                                : page === "accounts"
+                                  ? "Bakiyelerini ve transferlerini tek yerde gör."
+                                  : page === "calendar"
+                                    ? "Yaklaşan gelir, ödeme ve taksitlerini takip et."
+                                    : page === "settings"
+                                      ? "Uygulama kurulumu ve cihazında kullanım."
+                                      : "Kategorilerini yönet, verilerini yanında taşı."}
                 </Txt>
               </View>
               {page === "investments" ? null : page === "accounts" ? (
@@ -688,6 +703,7 @@ export default function BudgetApp() {
             {Platform.OS === "web" ? (
               <PwaPanel visible={page === "settings"} />
             ) : null}
+            {page === "receipts" ? <ReceiptsDashboard month={month} /> : null}
             {page === "investments" ? (
               <InvestmentDashboard
                 onAccount={() =>
@@ -1329,8 +1345,11 @@ export default function BudgetApp() {
           </View>
         </ScrollView>
         {mobile ? (
-          <View
-            style={{
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            style={{ flexGrow: 0, flexShrink: 0 }}
+            contentContainerStyle={{
               flexDirection: "row",
               paddingTop: 9,
               paddingBottom: Math.max(insets.bottom, 12),
@@ -1347,7 +1366,8 @@ export default function BudgetApp() {
                 accessibilityState={{ selected: page === item.id }}
                 onPress={() => navigate(item.id)}
                 style={{
-                  flex: 1,
+                  minWidth: 72,
+                  paddingHorizontal: 6,
                   alignItems: "center",
                   gap: 5,
                   paddingVertical: 7,
@@ -1369,7 +1389,7 @@ export default function BudgetApp() {
                 </Txt>
               </Pressable>
             ))}
-          </View>
+          </ScrollView>
         ) : null}
       </View>
       {accountOpen ? (

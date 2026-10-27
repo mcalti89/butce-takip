@@ -11,11 +11,13 @@ import { cloudReceipts } from "./cloudApi";
 import { receiptKey, type Receipt } from "./receipt-model";
 type Index = {
   receipts: Receipt[];
+  loading: boolean;
   error: string;
   refresh: () => Promise<void>;
 };
 const Context = createContext<Index>({
   receipts: [],
+  loading: false,
   error: "",
   refresh: async () => {},
 });
@@ -25,8 +27,9 @@ export function ReceiptProvider({ children }: { children: React.ReactNode }) {
   const [snapshot, setSnapshot] = useState<{
     accountId?: string;
     receipts: Receipt[];
+    loading: boolean;
     error: string;
-  }>({ receipts: [], error: "" });
+  }>({ receipts: [], loading: false, error: "" });
   const [refreshToken, setRefreshToken] = useState(0);
   const refresh = useCallback(async () => {
     setRefreshToken((n) => n + 1);
@@ -34,17 +37,27 @@ export function ReceiptProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!accountId) return;
     let active = true;
+    let sequence = 0;
     const load = () => {
+      const request = ++sequence;
+      setSnapshot((old) => ({
+        accountId,
+        receipts: old.accountId === accountId ? old.receipts : [],
+        error: "",
+        loading: true,
+      }));
       void cloudReceipts(accountId)
         .then((receipts) => {
-          if (active) setSnapshot({ accountId, receipts, error: "" });
+          if (active && request === sequence)
+            setSnapshot({ accountId, receipts, loading: false, error: "" });
         })
         .catch((e: Error) => {
-          if (active)
+          if (active && request === sequence)
             setSnapshot((old) => ({
               accountId,
               receipts: old.accountId === accountId ? old.receipts : [],
               error: e.message,
+              loading: false,
             }));
         });
     };
@@ -63,7 +76,7 @@ export function ReceiptProvider({ children }: { children: React.ReactNode }) {
   const current =
     snapshot.accountId === accountId && accountId
       ? snapshot
-      : { receipts: [], error: "" };
+      : { receipts: [], loading: Boolean(accountId), error: "" };
   return (
     <Context.Provider value={{ ...current, refresh }}>
       {children}
