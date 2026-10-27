@@ -11,6 +11,7 @@ services:
     - /share/butce-veritabani/ayarlar:/settings:rw
     - /share/butce-veritabani/veri:/existing-data:ro
     - /share/butce-veritabani/ayarlar/backend-private:/api-settings:rw
+    - /share/butce-veritabani/yedekler:/backups:rw
     entrypoint:
     - /bin/sh
     command:
@@ -52,6 +53,10 @@ services:
       chmod 700 /api-settings
       chmod 600 /api-settings/mysql-app-password.txt
       chmod 644 /api-settings/ca.pem
+
+      mkdir -p /backups
+      chown 0:0 /backups
+      chmod 700 /backups
   mysql:
     image: mysql:8.4@sha256:b265fd63b9c8168801c1628b0b21e915846e81192f5a493682a1184cbd70d896
     platform: linux/arm64
@@ -131,6 +136,7 @@ services:
     - /share/butce-veritabani/ayarlar/backend:/config:rw
     - /share/butce-veritabani/ayarlar/backend-private:/run/mysql:ro
     - /share/butce-dekont/uygulama/service-key.txt:/run/private/receipt-key.txt:ro
+    - /share/butce-veritabani/yedekler:/backups:rw
     command:
     - node
     - -e
@@ -139,12 +145,12 @@ services:
       const crypto = require('node:crypto');
       (async () => {
         const file = '/config/backend.cjs';
-        const hash = 'ddbf876415fa353946a273cb43d4b82d1f59424babf771064f5e51f1aa4136d2';
+        const hash = 'e7bc0f95af085cd7e21d4a8c6d09a0b38dc85fe53ef1a612100cb44dbbdc97d0';
         let code;
         try { code = await fs.readFile(file); } catch (error) { if(error.code !== 'ENOENT') throw error; }
         const valid = value => value && crypto.createHash('sha256').update(value).digest('hex') === hash;
         if (!valid(code)) {
-          const response = await fetch('https://raw.githubusercontent.com/mcalti89/butce-takip/26eec8c8c3045d377d41c5b44b0fa1cfa2d4fba2/deploy/qnap-mysql/backend.cjs', {redirect:'error', signal:AbortSignal.timeout(30000)});
+          const response = await fetch('https://raw.githubusercontent.com/mcalti89/butce-takip/fc554a4e821e6e88a46a91c1b61b6c57dd59bb4d/deploy/qnap-mysql/backend.cjs', {redirect:'error', signal:AbortSignal.timeout(30000)});
           if (!response.ok) throw new Error('DOWNLOAD');
           code = Buffer.from(await response.arrayBuffer());
           if (!valid(code)) throw new Error('HASH');
