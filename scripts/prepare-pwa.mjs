@@ -1,3 +1,4 @@
+import { preparePdfAssets } from "./prepare-pdf-assets.mjs";
 import { createHash } from "node:crypto";
 import {
   readFileSync,
@@ -10,7 +11,8 @@ import {
 import { join, resolve, relative, sep, basename, dirname } from "node:path";
 
 const root = resolve(process.argv[2] || "web-dist");
-const textExtensions = /\.(html|js|css|json|webmanifest)$/i;
+const textExtensions = /\.(html|mjs|js|css|json|webmanifest)$/i;
+preparePdfAssets(root);
 
 // Expo exports dependency fonts under assets/node_modules. Static hosts and
 // upload tools may exclude that directory even though these are public assets.
@@ -99,8 +101,17 @@ for (const file of files.sort()) {
   const path = "/" + relative(root, file).split(sep).join("/");
   const staticAsset =
     /^\/(assets|_expo\/static|icons)\//.test(path) &&
-    /\.(js|css|ttf|otf|woff2?|png|jpe?g|webp|svg)$/i.test(path);
-  if (!staticAsset && path !== "/manifest.webmanifest") continue;
+    /\.(mjs|js|css|ttf|otf|woff2?|png|jpe?g|webp|svg)$/i.test(path);
+  if (
+    !staticAsset &&
+    ![
+      "/manifest.webmanifest",
+      "/receipt-viewer.html",
+      "/receipt-viewer.js",
+      "/receipt-pdf-runtime.mjs",
+    ].includes(path)
+  )
+    continue;
   if (statSync(file).size > 8 * 1024 * 1024)
     throw new Error(`Statik varlık 8 MB sınırını aşıyor: ${path}`);
   paths.push(path);

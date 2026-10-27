@@ -1,5 +1,5 @@
-import React, { useEffect, useRef, useState } from "react";
-import { View, useWindowDimensions } from "react-native";
+import React, { useEffect, useRef, useState, useCallback } from "react";
+import { View, Pressable, useWindowDimensions } from "react-native";
 import { useBudget } from "@/lib/budget/store";
 import { useReceiptIndex } from "@/lib/budget/receipts";
 import { monthlyReceipts } from "@/lib/budget/receipt-list";
@@ -8,6 +8,8 @@ import { transferReceivedAmount } from "@/lib/budget/exchange";
 import { cloudDownloadReceipt } from "@/lib/budget/cloudApi";
 import { saveReceipt } from "@/lib/budget/receipt-files";
 import { Button, C, Card, ErrorText, Icon, Txt } from "./ui";
+
+import { ReceiptPreview } from "./receipt-preview";
 
 type Row = ReturnType<typeof monthlyReceipts>[number];
 function ReceiptRow({
@@ -20,6 +22,8 @@ function ReceiptRow({
   compact: boolean;
 }) {
   const { data } = useBudget();
+  const [preview, setPreview] = useState(false);
+  const closePreview = useCallback(() => setPreview(false), []);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const active = useRef(true);
@@ -113,14 +117,32 @@ function ReceiptRow({
           </Txt>
         </View>
         <View style={{ flex: compact ? undefined : 1, minWidth: 0, gap: 4 }}>
-          <View
-            style={{ flexDirection: "row", gap: 7, alignItems: "flex-start" }}
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={`${receipt.name} dekontunu önizle`}
+            disabled={!accountId}
+            onPress={() => setPreview(true)}
+            style={({ pressed }) => ({
+              flexDirection: "row",
+              gap: 7,
+              alignItems: "center",
+              minHeight: 38,
+              opacity: pressed ? 0.65 : 1,
+            })}
           >
             <Icon name="file-text" size={16} color={C.blue} />
-            <Txt style={{ flex: 1, minWidth: 0, fontSize: 12 }}>
+            <Txt
+              style={{
+                flex: 1,
+                minWidth: 0,
+                fontSize: 12,
+                color: C.blue,
+                textDecorationLine: "underline",
+              }}
+            >
               {receipt.name}
             </Txt>
-          </View>
+          </Pressable>
           <Txt style={{ color: C.dim, fontSize: 11 }}>
             PDF ·{" "}
             {receipt.size >= 1048576
@@ -142,6 +164,13 @@ function ReceiptRow({
         </Button>
       </View>
       {error ? <ErrorText message={error} /> : null}
+      {preview ? (
+        <ReceiptPreview
+          accountId={accountId}
+          receipt={receipt}
+          onClose={closePreview}
+        />
+      ) : null}
     </View>
   );
 }

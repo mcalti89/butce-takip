@@ -568,7 +568,7 @@ export default function BudgetApp() {
                       : page === "transactions"
                         ? "Gelir ve giderlerini tek yerde takip et."
                         : page === "receipts"
-                          ? "Seçili ayın dekontlarını işlem detaylarıyla gör ve indir."
+                          ? "Dekont adına tıklayıp görüntüle veya dosyayı indir."
                           : page === "budgets"
                             ? "Kategori limitlerini aya özel belirle."
                             : page === "fx"

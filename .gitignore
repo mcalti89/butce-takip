@@ -68,3 +68,7 @@ Thumbs.db
 
 # Expo verification output
 web-dist/
+
+# Generated local PDF rendering assets
+public/assets/pdfjs/
+public/receipt-pdf-runtime.mjs

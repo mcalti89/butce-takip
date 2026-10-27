@@ -1,0 +1,40 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self'; style-src 'unsafe-inline'; font-src 'self' blob:; img-src 'self' blob: data:; connect-src 'self'; base-uri 'none'; form-action 'none'">
+  <title>Dekont PDF önizleme</title>
+  <style>
+    * { box-sizing: border-box; }
+    html,body { margin:0; height:100%; font-family:system-ui,sans-serif; color:#f3f6fc; background:#0d1422; }
+    body { display:grid; grid-template-rows:auto 1fr; }
+    .toolbar { display:flex; justify-content:center; align-items:center; flex-wrap:wrap; gap:6px; padding:8px; background:#1b273a; border-bottom:1px solid #283347; }
+    button { min-width:34px; height:34px; background:#151e2e; border:1px solid #39465c; border-radius:6px; color:inherit; font-size:17px; cursor:pointer; }
+    button:disabled { opacity:.4; cursor:default; }
+    button:focus-visible { outline:2px solid #60a5fa; }
+    output { min-width:46px; text-align:center; font-size:12px; }
+    #stage { overflow:auto; min-height:0; overscroll-behavior:contain; }
+    canvas { display:block; margin:12px auto; background:white; box-shadow:0 2px 15px #0005; }
+    #status { padding:24px 16px; text-align:center; color:#a0adc1; font-size:14px; }
+    [hidden] { display:none!important; }
+  </style>
+</head>
+<body>
+  <div class="toolbar" role="toolbar" aria-label="PDF sayfa ve yakınlaştırma kontrolleri">
+    <button id="previous" aria-label="Önceki sayfa" disabled>‹</button>
+    <output id="pages" aria-live="polite">— / —</output>
+    <button id="next" aria-label="Sonraki sayfa" disabled>›</button>
+    <button id="out" aria-label="Küçült" disabled>−</button>
+    <output id="scale">100%</output>
+    <button id="in" aria-label="Büyüt" disabled>+</button>
+    <button id="fit" aria-label="Genişliğe sığdır" disabled>↔</button>
+  </div>
+  <div id="stage">
+    <div id="status" role="status">PDF hazırlanıyor…</div>
+    <canvas id="page" aria-label="PDF sayfası" hidden></canvas>
+  </div>
+  <script type="module" src="/receipt-viewer.js"></script>
+</body>
+</html>

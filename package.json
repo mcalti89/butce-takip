@@ -6,7 +6,7 @@
   "scripts": {
     "dev": "concurrently -k \"pnpm dev:server\" \"pnpm dev:metro\"",
     "dev:server": "cross-env PORT=3000 NODE_ENV=development tsx watch server/_core/index.ts",
-    "dev:metro": "cross-env EXPO_USE_METRO_WORKSPACE_ROOT=1 EXPO_PORT=8081 npx expo start --web --port 8081",
+    "dev:metro": "node scripts/prepare-pdf-assets.mjs public && cross-env EXPO_USE_METRO_WORKSPACE_ROOT=1 EXPO_PORT=8081 npx expo start --web --port 8081",
     "build": "esbuild server/_core/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist",
     "start": "NODE_ENV=production node dist/index.js",
     "check": "tsc --noEmit",
@@ -60,6 +60,7 @@
     "jose": "6.1.0",
     "mysql2": "^3.16.0",
     "nativewind": "^4.2.1",
+    "pdfjs-dist": "6.4.299",
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "react-native": "0.86.3",
