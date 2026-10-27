@@ -1,0 +1,2 @@
+# Generated, reproducible Node runtime; review the TypeScript sources.
+deploy/qnap-mysql/backend.cjs -diff -text -whitespace
