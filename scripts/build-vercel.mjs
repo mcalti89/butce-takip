@@ -13,6 +13,8 @@ const commands = process.env.BUDGET_BACKEND_URL
         ["exec", "tsx", "scripts/sync-fx-archive.ts"],
       ]
     : [];
+if (!process.env.BUDGET_BACKEND_URL && process.env.BUDGET_NAS_STANDBY_URL)
+  commands.push(["exec", "tsx", "scripts/verify-nas-backend-deployment.ts"]);
 commands.push(["build:pwa"]);
 for (const args of commands) {
   const result = spawnSync("npx", ["--yes", "pnpm@9.12.0", ...args], {

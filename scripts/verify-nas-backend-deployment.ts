@@ -2,7 +2,7 @@ import { NasBackendClient } from "../server/nas/remote";
 import { decodeBody, MAX_REQUEST } from "../server/nas/protocol";
 async function main() {
   const client = new NasBackendClient(
-    process.env.BUDGET_BACKEND_URL ?? "",
+    process.env.BUDGET_BACKEND_URL ?? process.env.BUDGET_NAS_STANDBY_URL ?? "",
     process.env.BUDGET_BACKEND_SECRET ?? "",
   );
   const status = await client.request({
