@@ -1,10 +1,20 @@
 import { NasBackendClient } from "../server/nas/remote";
 import { decodeBody, MAX_REQUEST } from "../server/nas/protocol";
+import { verifyNasCheckpoint } from "../server/nas/checkpoint";
 async function main() {
   const client = new NasBackendClient(
     process.env.BUDGET_BACKEND_URL ?? process.env.BUDGET_NAS_STANDBY_URL ?? "",
     process.env.BUDGET_BACKEND_SECRET ?? "",
   );
+  if (process.env.BUDGET_EXPECTED_NAS_MANIFEST) {
+    await verifyNasCheckpoint(
+      client,
+      JSON.parse(process.env.BUDGET_EXPECTED_NAS_MANIFEST),
+    );
+    console.log(
+      "NAS cutover checkpoint: all 14 table counts and hashes match.",
+    );
+  }
   const status = await client.request({
     method: "GET",
     path: "/api/cloud?action=status",
