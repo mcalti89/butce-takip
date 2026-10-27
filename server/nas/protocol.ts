@@ -53,7 +53,9 @@ export function validPath(path: unknown): path is string {
   return (
     typeof path === "string" &&
     path.length <= 4096 &&
-    /^\/api\/(cloud|fx|fx-sync|receipts-sync)(\?[^#\r\n]*)?$/.test(path)
+    /^(?:\/api\/(cloud|fx|fx-sync|receipts-sync)(\?[^#\r\n]*)?|\/internal\/migration)$/.test(
+      path,
+    )
   );
 }
 export function decodeBody(value: unknown, max: number) {

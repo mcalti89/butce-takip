@@ -89,6 +89,65 @@ function signed(
   };
 }
 describe("NAS database HTTPS bridge", () => {
+  it("pauses all data and maintenance writes while preserving budget reads", async () => {
+    let called = 0;
+    const local = express();
+    local.use((_req, res) => {
+      called++;
+      res.json({ ok: true });
+    });
+    const env: NodeJS.ProcessEnv = {
+      NODE_ENV: "test",
+      BUDGET_WRITES_PAUSED: "1",
+    };
+    const entry = await listen(withNasBackend(local, { env }));
+    for (const path of [
+      "/api/fx-sync",
+      "/api/receipts-sync",
+      "/api/fx",
+      "/api/fx?action=latest",
+      "/api/cloud?action=google%2Dconfig",
+    ]) {
+      const response = await fetch(entry.url + path);
+      expect(response.status).toBe(503);
+      expect(response.headers.get("retry-after")).toBe("60");
+    }
+    expect(
+      (await fetch(entry.url + "/api/cloud?action=data", { method: "POST" }))
+        .status,
+    ).toBe(503);
+    expect(called).toBe(0);
+    expect((await fetch(entry.url + "/api/cloud?action=data")).status).toBe(
+      200,
+    );
+    expect(called).toBe(1);
+  });
+  it("keeps the migration path private even when NAS routing is enabled", async () => {
+    const f = await fixture();
+    const entry = await listen(
+      withNasBackend(express(), {
+        env: {
+          NODE_ENV: "test",
+          BUDGET_BACKEND_URL: f.outer.url,
+          BUDGET_BACKEND_SECRET: f.secret,
+        },
+        localTest: true,
+      }),
+    );
+    expect(
+      (await fetch(entry.url + "/internal/migration", { method: "POST" }))
+        .status,
+    ).toBe(405);
+    expect(f.calls()).toBe(0);
+    expect(
+      (
+        await f.client.request(
+          message({ method: "POST", path: "/internal/migration" }),
+        )
+      ).status,
+    ).toBe(200);
+  });
+
   it("preserves original origin, session cookies, request bytes and multiple Set-Cookie values", async () => {
     const f = await fixture();
     const result = await f.client.request(

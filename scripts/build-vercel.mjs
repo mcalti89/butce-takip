@@ -1,20 +1,25 @@
 import { spawnSync } from "node:child_process";
 
-const commands = process.env.BUDGET_BACKEND_URL
-  ? [
-      ["exec", "tsx", "scripts/verify-nas-backend-deployment.ts"],
-      ["exec", "tsx", "scripts/verify-nas-deployment.ts"],
-    ]
-  : process.env.BUDGET_DATABASE_URL
-    ? [
-        ["db:budget"],
-        ["exec", "tsx", "scripts/verify-nas-deployment.ts"],
-        ["exec", "tsx", "scripts/verify-budget-deployment.ts"],
-        ["exec", "tsx", "scripts/sync-fx-archive.ts"],
-      ]
-    : [];
+const commands =
+  process.env.BUDGET_WRITES_PAUSED === "1"
+    ? [["exec", "tsx", "scripts/verify-nas-deployment.ts"]]
+    : process.env.BUDGET_BACKEND_URL
+      ? [
+          ["exec", "tsx", "scripts/verify-nas-backend-deployment.ts"],
+          ["exec", "tsx", "scripts/verify-nas-deployment.ts"],
+        ]
+      : process.env.BUDGET_DATABASE_URL
+        ? [
+            ["db:budget"],
+            ["exec", "tsx", "scripts/verify-nas-deployment.ts"],
+            ["exec", "tsx", "scripts/verify-budget-deployment.ts"],
+            ["exec", "tsx", "scripts/sync-fx-archive.ts"],
+          ]
+        : [];
 if (!process.env.BUDGET_BACKEND_URL && process.env.BUDGET_NAS_STANDBY_URL)
   commands.push(["exec", "tsx", "scripts/verify-nas-backend-deployment.ts"]);
+if (process.env.BUDGET_MIGRATION_OPERATION)
+  commands.push(["exec", "tsx", "scripts/migrate-to-nas.ts"]);
 commands.push(["build:pwa"]);
 for (const args of commands) {
   const result = spawnSync("npx", ["--yes", "pnpm@9.12.0", ...args], {

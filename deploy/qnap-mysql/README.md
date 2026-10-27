@@ -80,3 +80,9 @@ MySQL uygulama hesabı ve VERIFY_IDENTITY testi başarılı olduktan sonra
 Ayrıntılı kurulum, veri yedeği/aktarım şartları ve geri dönüş kısıtları:
 [docs/NAS-DATABASE-MIGRATION.md](../../docs/NAS-DATABASE-MIGRATION.md).
 Bu paket canlı verileri otomatik taşımaz veya Production'ı değiştirmez.
+
+API paketinin güncel sürümü `/health` yanıtında `version:2` gösterir. Özel
+şifreli yedekleme/geri yükleme desteği için `yedekler` klasörü API'ye bağlanır.
+Mevcut API bağlantı anahtarı korunur; Vercel'e yeniden anahtar eklemek gerekmez.
+Şifreleme anahtarı ayrıca `ayarlar/backend/backup-key.txt` içinde oluşur ve
+özel ayar yedeğine dahil edilmelidir. Hiçbir veri otomatik olarak canlıya alınmaz.

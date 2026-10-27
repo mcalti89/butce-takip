@@ -1,4 +1,5 @@
 import express from "express";
+import { NasMigration } from "../server/nas/migration";
 import { createServer } from "node:http";
 import { readFile, writeFile, chmod } from "node:fs/promises";
 import { randomBytes } from "node:crypto";
@@ -53,6 +54,9 @@ async function main() {
       await pool.query(statement);
   const repository = new MysqlBudgetRepository(pool);
   const inner = express();
+  const migration = new NasMigration(pool, "/backups", "/config");
+  await migration.initialize();
+  inner.use(migration.app());
   inner.use(createBudgetApp({ repository }));
   inner.use(
     createFxApp({ repository: new FxRepository(pool), cronSecret: secret }),

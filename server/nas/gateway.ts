@@ -35,7 +35,7 @@ export function createNasGateway(options: {
     next();
   });
   app.get("/health", (_req, res) =>
-    res.json({ service: "butce-database-api", version: 1, status: "ok" }),
+    res.json({ service: "butce-database-api", version: 2, status: "ok" }),
   );
   app.post(
     "/v1/request",

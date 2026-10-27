@@ -43,10 +43,11 @@ Tünel token'ı değiştirilmez veya API'ye verilmez.
    Mevcut dekont uygulamasının Inspect/Networks alanından gerçek ağ adı
    doğrulanıp yalnızca `networks.dekont-tunnel.name` düzeltilir.
 6. Cloudflare Networking → Tunnels → `butce-nas` → Routes → Add route →
-   Published application: hostname `veritabani.muratcalti.com`, service
+   Published application: hostname `butce-veritabani.muratcalti.com`, service
    `http://veritabani-api:8790`, path boş. DNS kaydı Cloudflare'da oluşur;
    Turkticaret hostinginde subdomain oluşturmak gerekmez.
-7. `https://veritabani.muratcalti.com/health` yalnızca hizmet durumunu gösterir.
+7. `https://butce-veritabani.muratcalti.com/health` güncel pakette `version:2`
+   ve `status:ok` döndürür; yalnızca hizmet durumunu gösterir.
    Gerçek SQL/oturum denetimi imzalı özel isteklerle ayrıca yapılır.
 
 API anahtarı: `butce-veritabani-veritabani-api-1` → Execute → `/bin/sh` →
@@ -68,8 +69,25 @@ BUDGET_NAS_SECRET'tan farklıdır. **Canlı veriler taşınana kadar**
 - Kullanıcı UUID'leri, Google kimlikleri, oturumlar/challenge'lar, document
   JSON ve revision'lar, dekont metadata/marker/silme kuyruğu ve TCMB arşivi
   korunur. Finansal belge veya kullanıcı eşlemesi yeniden üretilmez.
-- Bu sürüm henüz otomatik dışa/içe aktarma uç noktası içermez. Veri taşıma
-  aracı ve doğrulaması tamamlanmadan canlı URL değiştirilmez.
+- `scripts/migrate-to-nas.ts`, Aiven üzerinde tek bir REPEATABLE READ tutarlı
+  kopyadan 14 tabloyu dışa aktarır. İmzalı, sıralı ve tekrar gönderilebilir
+  parçalarla NAS’a iletir. NAS, gzip + AES-256-GCM ile şifreli yedeği
+  `butce-veritabani/yedekler` içinde saklar; açık metin SQL/JSON dosyası yazılmaz.
+  Geri yüklemeden önce kimlik doğrulama etiketi, dosyanın SHA-256 özeti ve her
+  tablonun satır sayısı/içerik özeti doğrulanır.
+- Şifreleme anahtarı `ayarlar/backend/backup-key.txt` içinde 0600 izinle
+  saklanır. **Bu özel anahtar olmadan şifreli yedek açılamaz.** Var olan
+  şifreli yedekler varken anahtar eksikse servis yeni anahtar üretmez, durur.
+  Şifreli yedeklerle özel `ayarlar` dizini ayrı cihaz/depolamada da korunmalıdır.
+  GitHub kaynak yedeği, canlı veritabanı veya bu özel anahtarların yedeği değildir.
+- İlk geri yükleme boş hedefe yapılır. Daha sonraki kopya ancak hedefin son
+  doğrulanmış aktarım sonrasında hiç değişmediği doğrulanırsa uygulanır. Hedefte
+  yeni kayıtlar varsa üzerine yazılmaz. Tüm geri yükleme tek SQL transaction
+  içinde yapılır; satır/bağ kuralı/hash hatasında tamamı geri alınır.
+- Kaynakta snapshot manifesti dışındaki bir tablo varsa araç kendiliğinden
+  atlamaz; `SOURCE_TABLES_REQUIRE_REVIEW` ile durur. Mevcut veri dosyaları
+  veya Aiven kayıtları otomatik silinmez. Araç yalnızca özel HMAC yolundan
+  yönetilir; genel bir SQL çalıştırma ucu eklenmez.
 - Son aktarım sırasında kısa yazma durdurması uygulanır, son tutarlı kopya
   yüklenir, tablo sayıları/hash/revision ve PDF ilişkileri karşılaştırılır.
 - Gerçek hesapla giriş, boş yeni kullanıcı, OMR, transfer, yatırım, hesap
@@ -78,7 +96,7 @@ BUDGET_NAS_SECRET'tan farklıdır. **Canlı veriler taşınana kadar**
 ## Canlı geçiş ve geri dönüş
 
 Doğrulanan aktarım sonrasında Vercel Production'da
-`BUDGET_BACKEND_URL=https://veritabani.muratcalti.com` ve özel
+`BUDGET_BACKEND_URL=https://butce-veritabani.muratcalti.com` ve özel
 `BUDGET_BACKEND_SECRET` etkinleştirilir. Yeni build, imzalı ulaşımı, Google
 ayarını, anonim erişim engelini, SQL şemasını ve ayrı NAS dekont servisini sınar;
 Aiven'e şema/smoke verisi yazmaz. Eski Aiven bağlantı ayarları başlangıçta
@@ -110,3 +128,49 @@ Runtime, `node scripts/build-nas-backend.mjs` ile bağımlılıklar ve SQL şema
 birlikte üretilir. Bootstrap Git commit'ine sabitlenmiş dosyayı SHA-256 kontrolüyle
 indirir. Doğru önbellek varsa yeniden başlatmada indirme gerekmez. Güncelleme
 ayrı runtime commit'i ve ona sabitlenen Compose hash/URL değişikliğiyle yapılır.
+
+
+## Operatör: özel veri yedeği ve aktarım işi
+
+Bu aşamaya yalnızca NAS `version:2` paketi kurulduktan sonra geçilir.
+`BUDGET_BACKEND_SECRET` Vercel Production'da hassas sunucu değişkenidir.
+`BUDGET_NAS_STANDBY_URL=https://butce-veritabani.muratcalti.com` yalnızca
+hazırlık/denetim adresidir; canlı trafiği yönlendirmez. Gerçek yönlendirme
+anahtarı `BUDGET_BACKEND_URL` ayrı tutulur.
+
+Vercel build işi, `BUDGET_MIGRATION_OPERATION` açıkça verilirse özel aktarım
+aracını çalıştırır. Varsayılan yayında veri taşıma yapılmaz. Başarı çıktısı
+`BUDGET_MIGRATION_RESULT` yalnızca yedek kimliği, boyut, satır sayıları ve
+hash bilgileri içerir; müşteri verisi, e-posta, dosya adı, oturum veya anahtar
+loglanmaz. SQL kimlik bilgileri ve snapshot satırları build belleğinden HTTPS
+ile NAS'a iletilir; GitHub'a veya Vercel'in statik çıktılarına yazılmaz.
+
+- `snapshot`: şifreli yedek alır ve yeniden okuyarak doğrular; hedefe yazmaz.
+- `standby-copy`: aynı yedeği ayrıca özel hedefe geri yükler, 14 tabloyu
+  karşılaştırır. Canlı trafiği yönlendirmez.
+- `final-copy`: önceden yayımlanmış yazma durdurması gerektirir.
+  `BUDGET_WRITES_PAUSED=1` ve önceki, gerçekten READY olmuş durdurulmuş yayının
+  zamanı `BUDGET_MIGRATION_FROZEN_SINCE` ile sağlanır. Son kaynak kopyası
+  alınmadan önce en az 65 saniye geçmesi beklenir. Operatör, alias'ın bu
+  durdurulmuş yayına baktığını ayrıca Vercel API'sinden doğrular.
+
+Yazma durdurmasında API, işlem/transfer/dekont/kullanıcı giriş POST'larına,
+Google challenge üretimine, bakım cronlarına ve yazabilen FX latest çağrısına
+503 + Retry-After döndürür. Bütçe okuma ve mevcut dekont indirme açık kalır.
+Durdurulmuş build, Aiven'e test hesabı veya TCMB güncellemesi yazmaz. Son
+kopya ve NAS-only PDF'lerin içerik özetleri doğrulanmadan canlı adres açılmaz.
+Aktarım işi değişkeni, sonraki normal yayınlar öncesinde kaldırılır.
+
+Özel NAS yönetim yolu `/internal/migration` yalnızca imzalı gateway zarfından
+çalışır. Doğrudan public NAS yolundan ve Vercel tarayıcı rotalarından erişilemez.
+Yedek yükleme en çok 256 KiB parçalarla, toplam 512 MiB açık veri ve satır
+başına 16 MiB sınırıyla yapılır; bu sınırlar NAS disk kotası değildir. Her
+parça için offset/hash kontrolü uygulanır. Tamamlanmış şifreli yedekler
+abort ile silinmez. Geri yükleme arka planda çalışır, sonucu durumdan okunur.
+
+Yeni doğrulamalar: 502 test geçti, önceden atlanan bir test yine atlandı.
+Anahtar kaybı koruması ve 3 MiB PDF gövdesinin özel yönetim parser'ından
+etkilenmemesi de bu kontroller arasındadır. Gerçek MySQL kullanan kapsayıcıda imzalı API üzerinden
+snapshot yükleme, şifreli dosyayı yeniden doğrulama ve 14 tablonun tamamını
+byte/hash eşitliğiyle geri yükleme denendi. Bu test verileri sentetiktir;
+canlı Aiven verilerinin aktarılmış olduğu anlamına gelmez.

@@ -157,7 +157,11 @@ export function withNasBackend(
     const env = options.env ?? process.env;
     try {
       const path = req.originalUrl;
-      if (!validPath(path) || !["GET", "POST"].includes(req.method))
+      if (
+        !validPath(path) ||
+        path.startsWith("/internal/") ||
+        !["GET", "POST"].includes(req.method)
+      )
         return res.status(405).json({ error: "method_not_allowed" });
       const headers: Record<string, string> = {};
       for (const name of REQUEST_HEADERS) {
@@ -217,6 +221,28 @@ export function withNasBackend(
       _next: express.NextFunction,
     ) => res.status(413).json({ error: "request_too_large" }),
   );
+  app.use((req, res, next) => {
+    const env = options.env ?? process.env;
+    if (env.BUDGET_WRITES_PAUSED === "1") {
+      const url = new URL(req.originalUrl, "http://localhost");
+      const action = url.searchParams.get("action");
+      const mutates =
+        req.method !== "GET" ||
+        ["/api/fx-sync", "/api/receipts-sync"].includes(url.pathname) ||
+        (url.pathname === "/api/cloud" && action === "google-config") ||
+        (url.pathname === "/api/fx" && (!action || action === "latest"));
+      if (mutates)
+        return res
+          .status(503)
+          .set({ "Retry-After": "60", "Cache-Control": "no-store" })
+          .json({
+            code: "MAINTENANCE",
+            error:
+              "Veritabanı aktarımı sürüyor. Kayıt için biraz sonra tekrar dene.",
+          });
+    }
+    next();
+  });
   app.use((req, res, next) =>
     (options.env ?? process.env).BUDGET_BACKEND_URL
       ? remote(req, res, next)
