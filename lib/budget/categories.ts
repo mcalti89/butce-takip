@@ -1,3 +1,4 @@
+import { isCategoryIcon } from "./category-icons";
 import type { BudgetData, Category } from "./model";
 const normalizedName = (name: string) =>
   name.trim().replace(/\s+/g, " ").toLocaleLowerCase("tr-TR");
@@ -36,10 +37,11 @@ export function saveCategory(data: BudgetData, category: Category): BudgetData {
     )
   )
     throw new Error("Bu isimde bir kategori zaten var.");
+  if (category.icon !== previous?.icon && !isCategoryIcon(category.icon))
+    throw new Error("Listeden geçerli bir kategori simgesi seç.");
   const next = {
     ...category,
     name,
-    ...(previous ? { icon: previous.icon } : {}),
   };
   return {
     ...data,

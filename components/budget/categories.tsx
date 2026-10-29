@@ -1,3 +1,4 @@
+import { CATEGORY_ICONS } from "@/lib/budget/category-icons";
 import React, { useState } from "react";
 import { Pressable, View } from "react-native";
 import { useBudget } from "@/lib/budget/store";
@@ -36,6 +37,9 @@ export function CategoryManager({
   );
   const [editingId, setEditingId] = useState<string | null>(null);
   const [name, setName] = useState("");
+  const [icon, setIcon] = useState(
+    initialType === "income" ? "briefcase" : "tag",
+  );
   const [color, setColor] = useState(PALETTE[0]);
   const [replacementId, setReplacementId] = useState("");
   const [busy, setBusy] = useState(false),
@@ -54,6 +58,7 @@ export function CategoryManager({
   function edit(category?: Category) {
     setEditingId(category?.id ?? null);
     setName(category?.name ?? "");
+    setIcon(category?.icon ?? (type === "income" ? "briefcase" : "tag"));
     setColor(category?.color ?? PALETTE[0]);
     setError("");
     setMode("form");
@@ -66,7 +71,7 @@ export function CategoryManager({
       name,
       type,
       color,
-      icon: editing?.icon ?? (type === "income" ? "briefcase" : "tag"),
+      icon,
     };
     try {
       await update((d) => {
@@ -138,6 +143,13 @@ export function CategoryManager({
               kind={type === t ? "primary" : "secondary"}
               onPress={() => {
                 setType(t);
+                setIcon((old) =>
+                  old === "tag" || old === "briefcase"
+                    ? t === "income"
+                      ? "briefcase"
+                      : "tag"
+                    : old,
+                );
                 setError("");
               }}
               style={{ flex: 1 }}
@@ -153,8 +165,8 @@ export function CategoryManager({
             Yeni kategori ekle
           </Button>
           <Txt style={{ color: C.muted, fontSize: 12, marginVertical: 14 }}>
-            Adı ve rengi düzenleyebilirsin. Kullanılmış kategoriyi kaldırırken
-            bağlı kayıtlar aynı türde başka bir kategoriye taşınır.
+            Adı, rengi ve simgeyi düzenleyebilirsin. Kullanılmış kategoriyi
+            kaldırırken bağlı kayıtlar aynı türde başka bir kategoriye taşınır.
           </Txt>
           {rows.length ? (
             rows.map((category) => {
@@ -234,6 +246,82 @@ export function CategoryManager({
             maxLength={40}
             editable={!busy}
           />
+          <View
+            accessibilityLabel="Kategori önizlemesi"
+            style={{
+              flexDirection: "row",
+              alignItems: "center",
+              gap: 12,
+              padding: 14,
+              backgroundColor: C.bg,
+              borderRadius: 10,
+              marginBottom: 18,
+            }}
+          >
+            <Icon name={icon} color={color} size={28} />
+            <Txt bold style={{ flex: 1 }}>
+              {name.trim() || "Kategori önizlemesi"}
+            </Txt>
+          </View>
+          <Txt bold style={{ marginBottom: 10 }}>
+            Kategori simgesi
+          </Txt>
+          <View
+            accessibilityRole="radiogroup"
+            accessibilityLabel="Kategori simgesi"
+            style={{
+              flexDirection: "row",
+              flexWrap: "wrap",
+              gap: 8,
+              marginBottom: 20,
+            }}
+          >
+            {[
+              ...CATEGORY_ICONS,
+              ...(editing &&
+              !CATEGORY_ICONS.some((item) => item.name === editing.icon)
+                ? [{ name: editing.icon, label: "Mevcut simge" }]
+                : []),
+            ].map((item) => (
+              <Pressable
+                key={item.name}
+                accessibilityRole="radio"
+                accessibilityLabel={`${item.label} simgesini seç`}
+                accessibilityState={{
+                  checked: icon === item.name,
+                  disabled: busy,
+                }}
+                aria-checked={icon === item.name}
+                disabled={busy}
+                onPress={() => setIcon(item.name)}
+                style={{
+                  flexBasis: 64,
+                  flexGrow: 1,
+                  maxWidth: 104,
+                  minHeight: 68,
+                  padding: 8,
+                  gap: 5,
+                  alignItems: "center",
+                  justifyContent: "center",
+                  borderWidth: 2,
+                  borderRadius: 10,
+                  borderColor: icon === item.name ? color : C.border,
+                  backgroundColor: icon === item.name ? C.elevated : C.bg,
+                }}
+              >
+                <Icon
+                  name={item.name}
+                  color={icon === item.name ? color : C.muted}
+                  size={23}
+                />
+                <Txt
+                  style={{ fontSize: 10, lineHeight: 14, textAlign: "center" }}
+                >
+                  {item.label}
+                </Txt>
+              </Pressable>
+            ))}
+          </View>
           <Txt bold style={{ marginBottom: 10 }}>
             Kategori rengi
           </Txt>
@@ -271,8 +359,8 @@ export function CategoryManager({
           </View>
           {editingId ? (
             <Txt style={{ color: C.dim, fontSize: 11, marginBottom: 12 }}>
-              Kategori türü sabittir. Ad/renk değişikliği mevcut işlem ve
-              planlara da yansır.
+              Kategori türü sabittir. Ad, renk ve simge değişikliği mevcut işlem
+              ve planlara da yansır.
             </Txt>
           ) : null}
           <ErrorText message={error} />

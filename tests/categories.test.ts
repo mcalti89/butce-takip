@@ -94,22 +94,37 @@ describe("personal category management", () => {
       expect(() => saveCategory(emptyData(), { ...custom, name })).toThrow();
     },
   );
-  it("renames and recolors an existing category without rewriting financial amounts or IDs", () => {
+  it("renames, recolors and changes the icon of an existing category without rewriting financial amounts or IDs", () => {
     const d = usedData();
     const r = saveCategory(d, {
       ...custom,
       name: "Çocukların eğitimi",
       color: "#22C55E",
-      icon: "other",
+      icon: "book-open",
     });
     expect(r.transactions).toEqual(d.transactions);
     expect(r.paymentPlans).toEqual(d.paymentPlans);
     expect(r.categories.find((c) => c.id === "school")).toMatchObject({
       name: "Çocukların eğitimi",
       color: "#22C55E",
-      icon: "tag",
+      icon: "book-open",
     });
     expect(validateData(r)).toBe(true);
+  });
+  it("rejects unavailable icons instead of saving a broken glyph", () => {
+    expect(() =>
+      saveCategory(emptyData(), { ...custom, icon: "not-an-icon" }),
+    ).toThrow("simge");
+    expect(() =>
+      saveCategory(usedData(), { ...custom, icon: "not-an-icon" }),
+    ).toThrow("simge");
+  });
+  it("preserves an existing imported icon when only the name changes", () => {
+    const d = usedData();
+    d.categories.find((c) => c.id === custom.id)!.icon = "sparkles";
+    const r = saveCategory(d, { ...custom, name: "Okul", icon: "sparkles" });
+    expect(r.categories.find((c) => c.id === custom.id)?.icon).toBe("sparkles");
+    expect(r.budgets).toEqual(d.budgets);
   });
   it("prevents changing the type of an existing category", () => {
     expect(() =>
