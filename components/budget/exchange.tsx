@@ -120,7 +120,7 @@ export function ExchangeEditor({
     "transfer",
     entryId,
     busy,
-    receiptImport?.file,
+    receiptImport?.attach === false ? undefined : receiptImport?.file,
   );
   const n = parseAmount(amount, source?.currency);
   const initialRate = transfer?.exchange

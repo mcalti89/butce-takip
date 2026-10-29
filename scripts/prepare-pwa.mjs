@@ -1,3 +1,4 @@
+import { prepareOcrAssets } from "./prepare-ocr-assets.mjs";
 import { preparePdfAssets } from "./prepare-pdf-assets.mjs";
 import { createHash } from "node:crypto";
 import {
@@ -13,6 +14,7 @@ import { join, resolve, relative, sep, basename, dirname } from "node:path";
 const root = resolve(process.argv[2] || "web-dist");
 const textExtensions = /\.(html|mjs|js|css|json|webmanifest)$/i;
 preparePdfAssets(root);
+prepareOcrAssets(root);
 
 // Expo exports dependency fonts under assets/node_modules. Static hosts and
 // upload tools may exclude that directory even though these are public assets.
@@ -106,6 +108,9 @@ for (const file of files.sort()) {
     !staticAsset &&
     ![
       "/manifest.webmanifest",
+      "/photo-reader.html",
+      "/photo-reader.js",
+      "/receipt-ocr-runtime.mjs",
       "/receipt-reader.html",
       "/receipt-reader.js",
       "/receipt-viewer.html",

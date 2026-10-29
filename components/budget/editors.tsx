@@ -85,7 +85,7 @@ export function TransactionEditor({
     "transaction",
     entryId,
     busy,
-    receiptImport?.file,
+    receiptImport?.attach === false ? undefined : receiptImport?.file,
   );
   const [categoryManagerOpen, setCategoryManagerOpen] = useState(false);
   const [transferOpen, setTransferOpen] = useState(false);
@@ -164,7 +164,11 @@ export function TransactionEditor({
       (currency !== "TRY" || initial?.planId || receiptImport) &&
       date > today()
     ) {
-      setError("Döviz kuru gelecekteki bir işlem tarihi için kullanılamaz.");
+      setError(
+        currency !== "TRY"
+          ? "Döviz kuru gelecekteki bir işlem tarihi için kullanılamaz."
+          : "Bugünü geçmeyen bir işlem tarihi gir.",
+      );
       return;
     }
     if (!categories.some((c) => c.id === categoryId)) {

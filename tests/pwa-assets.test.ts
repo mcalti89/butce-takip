@@ -60,6 +60,8 @@ describe("Vercel PWA varlık yolları", () => {
 
       const worker = readFileSync(join(root, "sw.js"), "utf8");
       expect(worker).toContain(vendor);
+      expect(worker).toContain("/receipt-ocr-runtime.mjs");
+      expect(worker).not.toContain(".traineddata.gz");
       expect(worker).toContain(entryPath);
       expect(worker).not.toContain("assets/node_modules");
       expect(worker).not.toContain("budget-pwa-unbuilt");

@@ -1,3 +1,6 @@
+import { PhotoImport } from "@/components/budget/photo-import";
+import { pickExpensePhoto } from "@/lib/budget/photo-files";
+import type { PhotoSelection } from "@/lib/budget/photo-types";
 import { ReceiptImport } from "@/components/budget/receipt-import";
 import { ReceiptsDashboard } from "@/components/budget/receipt-list";
 import { InvestmentDashboard } from "@/components/budget/investments";
@@ -85,6 +88,7 @@ type Page =
   | "data"
   | "settings";
 type Dialog =
+  | { kind: "photo-import"; selection: Promise<PhotoSelection> }
   | { kind: "receipt-import" }
   | {
       kind: "transaction";
@@ -637,6 +641,19 @@ export default function BudgetApp() {
                       onPress={() => setMonth((m) => shiftMonth(m, 1))}
                     />
                   </View>
+                  {page !== "calendar" ? (
+                    <Button
+                      icon="camera"
+                      kind="secondary"
+                      small={mobile}
+                      onPress={() => {
+                        const selection = pickExpensePhoto("camera");
+                        setDialog({ kind: "photo-import", selection });
+                      }}
+                    >
+                      Fotoğraftan ekle
+                    </Button>
+                  ) : null}
                   {page !== "calendar" ? (
                     <Button
                       icon="file-plus"
@@ -1442,6 +1459,13 @@ export default function BudgetApp() {
             <Icon name="x" size={13} />
           </Pressable>
         </View>
+      ) : null}
+      {dialog?.kind === "photo-import" ? (
+        <PhotoImport
+          selection={dialog.selection}
+          onClose={close}
+          onDone={notify}
+        />
       ) : null}
       {dialog?.kind === "receipt-import" ? (
         <ReceiptImport onClose={close} onDone={notify} />

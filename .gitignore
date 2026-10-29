@@ -72,3 +72,7 @@ web-dist/
 # Generated local PDF rendering assets
 public/assets/pdfjs/
 public/receipt-pdf-runtime.mjs
+
+# Generated on-device OCR runtime and language models
+public/assets/ocr/
+public/receipt-ocr-runtime.mjs

@@ -399,7 +399,7 @@ export function TransferEditor({
     "transfer",
     entryId,
     busy,
-    receiptImport?.file,
+    receiptImport?.attach === false ? undefined : receiptImport?.file,
   );
   const saved = useRef(!!transfer);
   async function save() {

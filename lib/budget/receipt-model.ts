@@ -28,6 +28,7 @@ export type ReceiptImportSource = {
   reference?: string;
 };
 export type ReceiptImportDraft = {
+  attach?: boolean;
   file: PickedReceipt;
   source: ReceiptImportSource;
   warnings: string[];
