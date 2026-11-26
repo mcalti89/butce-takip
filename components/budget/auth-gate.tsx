@@ -1,6 +1,7 @@
 import React from "react";
 import { ActivityIndicator, Platform, ScrollView, View } from "react-native";
 import { useBudget } from "@/lib/budget/store";
+import { goToPanel } from "@/lib/budget/cloudApi";
 import { GoogleButton } from "./google-button";
 import { Button, C, ErrorText, Icon, Txt } from "./ui";
 
@@ -66,10 +67,14 @@ export function BudgetGate({ children }: { children: React.ReactNode }) {
           </Txt>
           <Txt style={{ color: C.muted, textAlign: "center", lineHeight: 23 }}>
             Gelirlerini, giderlerini ve hedeflerini tek yerde takip et. Başlamak
-            için Google hesabınla giriş yap.
+            için {cloud.panelUrl ? "panelden" : "Google hesabınla"} giriş yap.
           </Txt>
         </View>
-        {cloud.googleEnabled || Platform.OS !== "web" ? (
+        {cloud.panelUrl ? (
+          <Button onPress={() => goToPanel(cloud.panelUrl!)}>
+            Panel ile giriş yap
+          </Button>
+        ) : cloud.googleEnabled || Platform.OS !== "web" ? (
           <GoogleButton onCredential={signInGoogle} />
         ) : (
           <Txt style={{ color: C.amber, textAlign: "center" }}>

@@ -319,6 +319,11 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
   const leaveCloud = useCallback(
     () =>
       serial(async () => {
+        if (cloud.panelUrl) {
+          // Signing out is shared by every app, so it happens on the panel.
+          api.goToPanel(cloud.panelUrl, true);
+          return;
+        }
         try {
           await api.cloudLogout();
         } catch (error) {
@@ -334,7 +339,7 @@ export function BudgetProvider({ children }: { children: React.ReactNode }) {
         }));
         announceAuthChange();
       }),
-    [serial, clearMemory],
+    [serial, clearMemory, cloud.panelUrl],
   );
   const startFresh = useCallback(() => update(() => emptyData()), [update]);
   return (

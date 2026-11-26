@@ -4,6 +4,8 @@ import type { PickedReceipt, Receipt, ReceiptKind } from "./receipt-model";
 export type CloudStatus = {
   enabled: boolean;
   googleEnabled: boolean;
+  /** Set when sign-in is done by the panel's main login instead of the Google button. */
+  panelUrl?: string;
   authenticated: boolean;
   accountId?: string;
   email?: string;
@@ -197,4 +199,15 @@ export async function cloudWrite(
       500,
     );
   return next.revision;
+}
+
+/** Sends the whole window (also when embedded in the panel) to the panel's sign-in or sign-out. */
+export function goToPanel(panelUrl: string, logout = false) {
+  if (typeof window === "undefined") return;
+  const url = `${panelUrl}/?${logout ? "logout=1&" : ""}return=${encodeURIComponent(window.location.href)}`;
+  try {
+    (window.top ?? window).location.href = url;
+  } catch {
+    window.location.href = url;
+  }
 }

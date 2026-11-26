@@ -90,3 +90,16 @@ tamamlanır. Geliştirme tarayıcı kontrolleri yerel imzalı sağlayıcı ve ge
 MySQL'i kullanır; bunlar gerçek Google kullanıcı onayıyla aynı kontrol değildir.
 Native uygulamada bu Google web/PWA akışını açan bağlantı bulunur; ayrı yerel Google
 SDK istemcileri bu değişikliğin kapsamında değildir.
+
+## Panel ana girişi (tek giriş)
+
+`BUDGET_PANEL_URL` (örneğin `https://panel.muratcalti.com`) ayarlanınca uygulamadaki Google düğmesi
+kapanır ve giriş panelden yapılır. Panel, `.muratcalti.com` alanında `mc_sso` adlı ES256 imzalı bir
+oturum çerezi kurar; API her istekte bu çerezi panelin `/.well-known/jwks.json` anahtarıyla doğrular.
+Çerezdeki `sub` Google hesap kimliğidir, bu yüzden Google ile açılmış mevcut hesaplar aynen eşlenir.
+`ALLOWED_EMAILS` (virgülle) ayarlıysa yalnızca bu e-postalar kabul edilir.
+
+- Panel modunda `google-config`, `google-login` ve `login` 410 döner; uygulamanın kendi oturum çerezi kullanılmaz.
+- Çıkış panelde yapılır ve tüm uygulamalar için ortaktır.
+- Çerez yalnızca `*.muratcalti.com` altında gönderilir; uygulama `butce.muratcalti.com` adresinden açılmalı ve
+  `BUDGET_APP_ORIGIN` bu adres olmalıdır.

@@ -14,6 +14,7 @@ import {
   makeGoogleVerifier,
   type GoogleVerifier,
 } from "./google";
+import { makePanelVerifier, PANEL_COOKIE, type PanelVerifier } from "./panel";
 import {
   hashPassword,
   sameSecret,
@@ -30,6 +31,8 @@ type Options = {
   production?: boolean;
   googleClientId?: string;
   googleVerifier?: GoogleVerifier;
+  panelUrl?: string;
+  panelVerifier?: PanelVerifier;
 };
 const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
 export function createBudgetApp(options: Options = {}) {
@@ -54,6 +57,18 @@ export function createBudgetApp(options: Options = {}) {
     options.googleClientId ?? process.env.BUDGET_GOOGLE_CLIENT_ID ?? "";
   const googleEnabled = Boolean(clientId);
   const verifyGoogle = options.googleVerifier ?? makeGoogleVerifier(clientId);
+  // Panel mode: the panel's main login replaces the in-app Google button.
+  const panelUrl = (options.panelUrl ?? process.env.BUDGET_PANEL_URL ?? "").replace(/\/$/, "");
+  const panelEnabled = Boolean(panelUrl);
+  const verifyPanel =
+    options.panelVerifier ??
+    makePanelVerifier(
+      panelUrl,
+      (process.env.ALLOWED_EMAILS ?? "")
+        .split(",")
+        .map((e) => e.trim().toLowerCase())
+        .filter(Boolean),
+    );
   const kind = googleEnabled ? "google" : "password";
   const cookieName = production
     ? `__Host-budget_${googleEnabled ? "google_" : ""}session`
@@ -70,7 +85,8 @@ export function createBudgetApp(options: Options = {}) {
   };
   const statusFor = (account: Account | null) => ({
     enabled: true,
-    googleEnabled,
+    googleEnabled: googleEnabled || panelEnabled,
+    ...(panelEnabled ? { panelUrl } : {}),
     authenticated: Boolean(account),
     ...(account
       ? {
@@ -129,7 +145,7 @@ export function createBudgetApp(options: Options = {}) {
             .json({ error: "İstek kaynağı doğrulanamadı." });
       }
       const repository = options.repository ?? getBudgetRepository();
-      if (!repository || (!googleEnabled && !ownerEmail))
+      if (!repository || (!googleEnabled && !panelEnabled && !ownerEmail))
         return res.status(action === "status" ? 200 : 503).json({
           enabled: false,
           googleEnabled,
@@ -144,10 +160,40 @@ export function createBudgetApp(options: Options = {}) {
         /* Invalid cookies cannot authenticate. */
       }
       const sessionToken = parsed[cookieName] || "";
-      const account =
-        sessionToken && sessionToken.length <= 128
-          ? await db.session(tokenHash(sessionToken), Date.now(), kind)
-          : null;
+      let account: Account | null = null;
+      if (panelEnabled) {
+        // Every request follows the panel's session, so signing out there signs out here.
+        const panelToken = parsed[PANEL_COOKIE] || "";
+        let identity;
+        try {
+          identity = panelToken ? await verifyPanel(panelToken) : null;
+        } catch {
+          identity = null;
+        }
+        if (identity) {
+          try {
+            account = await db.googleAccount(identity, ownerEmail, Date.now());
+          } catch (error) {
+            if (error instanceof GoogleAccountConflict)
+              return res.status(409).json({
+                error:
+                  "Bu e-postanın mevcut hesabıyla güvenli bağlantı kurulamadı. Mevcut kayıtlar korundu; hesap desteği gerekiyor.",
+              });
+            throw error;
+          }
+        }
+        if (["google-config", "google-login", "login"].includes(action))
+          return res
+            .status(410)
+            .json({ error: "Giriş artık panelden yapılıyor." });
+        if (action === "logout" && req.method === "POST")
+          return res.json({ ok: true, panelUrl });
+      } else {
+        account =
+          sessionToken && sessionToken.length <= 128
+            ? await db.session(tokenHash(sessionToken), Date.now(), kind)
+            : null;
+      }
       if (action === "status" && req.method === "GET") {
         if (!account) await db.account(ownerEmail);
         return res.json(statusFor(account));
@@ -286,7 +332,7 @@ export function createBudgetApp(options: Options = {}) {
           return res.status(401).json({ error: "E-posta veya parola hatalı." });
         return await issueSession(db, user, res);
       }
-      if (!account || (!googleEnabled && account.email !== ownerEmail))
+      if (!account || (!googleEnabled && !panelEnabled && account.email !== ownerEmail))
         return res
           .status(401)
           .json({ error: "Oturumun kapalı. Yeniden giriş yap." });
