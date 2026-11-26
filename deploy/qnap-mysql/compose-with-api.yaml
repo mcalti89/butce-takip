@@ -152,7 +152,7 @@ services:
         try { code = await fs.readFile(file); } catch (error) { if(error.code !== 'ENOENT') throw error; }
         const valid = value => value && crypto.createHash('sha256').update(value).digest('hex') === hash;
         if (!valid(code)) {
-          const response = await fetch('https://raw.githubusercontent.com/mcalti89/butce-takip/9f32a560d97902af560a5e66e8e299320dd74400/deploy/qnap-mysql/backend.cjs', {redirect:'error', signal:AbortSignal.timeout(30000)});
+          const response = await fetch('https://raw.githubusercontent.com/mcalti89/butce-takip/d22b8452503727f313850b068fcbdff0758b40e4/deploy/qnap-mysql/backend.cjs', {redirect:'error', signal:AbortSignal.timeout(30000)});
           if (!response.ok) throw new Error('DOWNLOAD');
           code = Buffer.from(await response.arrayBuffer());
           if (!valid(code)) throw new Error('HASH');
